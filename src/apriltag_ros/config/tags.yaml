@@ -1,0 +1,13 @@
+# standalone_tags:
+#   [
+#     {id: ID, size: SIZE, name: NAME},
+#     ...
+#   ]
+standalone_tags:
+  [
+      {id: 0, size: 0.16},
+  ]
+tag_bundles:
+  [
+  ]
+  
