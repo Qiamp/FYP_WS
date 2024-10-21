@@ -1,4 +1,2 @@
-#!/bin/bash
-
 echo "========== 1. Publishes camera_info =========="
 python3 ~/FYP_WS/src/drone_apriltag_tracking_Landing/scripts/pub_camera_info.py  ~/FYP_WS/src/drone_apriltag_tracking_Landing/config/gazebo_camera_cal.yaml

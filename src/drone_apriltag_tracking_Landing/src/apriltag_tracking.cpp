@@ -73,8 +73,7 @@ int main(int argc, char **argv)
         ros::spinOnce();
         if (at_in_data.detections.empty()) {
         ROS_WARN_STREAM("No AprilTags detected.");
-        // Here you could add any fallback behavior if necessary.
-        // current one is just to hover in place. 
+        // Add any fallback behavior if necessary.
         pose_vel.header.stamp = ros::Time::now();
         pose_vel.position.x = lpp_data.pose.position.x;
         pose_vel.position.y = lpp_data.pose.position.y;
