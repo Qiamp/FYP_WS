@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source ~/FYP_WS/devel/setup.bash
+#source ~/FYP_WS/devel/setup.bash
 
 source /home/jay/FYP_WS/src/PX4-Autopilot/Tools/setup_gazebo.bash /home/jay/FYP_WS/src/PX4-Autopilot/PX4-Autopilot /home/jay/FYP_WS/src/PX4-Autopilot/build/px4_sitl_default
 export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:/home/jay/FYP_WS/src/PX4-Autopilot
