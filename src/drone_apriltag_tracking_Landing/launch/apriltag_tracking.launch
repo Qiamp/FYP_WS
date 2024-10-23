@@ -10,8 +10,8 @@
     <!-- for virtual simulation with ros and gazebo classic -> 14557 -->
 
     <!-- launch mavros  -->
-    <arg name="fcu_url" default="udp://127.0.0.1:14547" />
-    <arg name="gcs_url" default="udp://127.0.0.1:14550" />
+    <arg name="fcu_url" default="udp://:14540@localhost:14557" />
+    <arg name="gcs_url" default="udp://:14550@localhost:14550" />
     <arg name="tgt_system" default="1" />
     <arg name="tgt_component" default="1" />
     <arg name="log_output" default="screen" />
