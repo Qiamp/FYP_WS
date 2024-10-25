@@ -1,2 +1,3 @@
-file_name: home/jay/FYP_WS/src/my_offboard_node/traj/p2p.txt
+file_name: /home/jay/FYP_WS/src/my_offboard_node/traj/p2p.txt
+
 control_freq: 100
