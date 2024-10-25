@@ -1,0 +1,3 @@
+<launch>
+    <node name="offb_node" pkg="my_offboard_node" type="offb_node" output="screen"/>
+</launch>
