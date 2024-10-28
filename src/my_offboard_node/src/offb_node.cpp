@@ -47,11 +47,11 @@ void vision_pose_cbk(const geometry_msgs::PoseStamped::ConstPtr& msg_in) {
   }
 }
 
-int _uav_pose_pinrt = 0;
-void uav_pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
-  current_pose = *msg;
-  _uav_pose_pinrt++;
-}
+// int _uav_pose_pinrt = 0;
+// void uav_pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+//   current_pose = *msg;
+//   _uav_pose_pinrt++;
+// }
 
 int main(int argc, char** argv) {
   YAML::Node traj_config = YAML::LoadFile(
@@ -75,8 +75,8 @@ int main(int argc, char** argv) {
   ros::ServiceClient set_mode_client =
       nh.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
-  ros::Subscriber sub = nh.subscribe<geometry_msgs::PoseStamped>(
-      "/mavros/vision_pose/pose", 1, uav_pose_cb);
+  // ros::Subscriber sub = nh.subscribe<geometry_msgs::PoseStamped>(
+  //     "/mavros/vision_pose/pose", 1, uav_pose_cb);
 
   // the setpoint publishing rate MUST be faster than 2Hz
   ros::Rate rate(control_freq);
