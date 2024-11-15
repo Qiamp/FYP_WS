@@ -78,8 +78,8 @@ int main(int argc, char **argv)
             ++count;
         }
 
-        if (count == 100) {
-            // recall rate is 20 Hz, therefore, 100 cycles is equivalent to 100 / 20 = 5 seconds
+        if (count == 60) {
+            // recall rate is 20 Hz, therefore, 100 cycles is equivalent to 100 / 20 = 3 seconds
             at_in = 0;
         }
 
@@ -185,8 +185,8 @@ int main(int argc, char **argv)
             // P_r_I is the position of the april tag in the inertial frame (i.e. r_PO_I)
             u = control_algorithm(r_DP_I, P_r_I);
         } else {
-            // if we reach this, then either we are just starting up, or we haven't seen the april tag in 5 or more seconds (so at least 5 seconds)
-            ROS_INFO_STREAM("Haven't seen april tag at least 5 seconds");
+            // if we reach this, then either we are just starting up, or we haven't seen the april tag in 3 or more seconds (so at least 5 seconds)
+            ROS_INFO_STREAM("Haven't seen april tag at least 3 seconds");
         }
         
         // ros::spinOnce();
