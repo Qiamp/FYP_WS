@@ -11,7 +11,6 @@
 #include "apriltag_ros/AprilTagDetectionArray.h"
 #include <Eigen/Dense>
 
-mavros_msgs::PositionTarget pose_vel;
 apriltag_ros::AprilTagDetectionArray at_in_data;
 geometry_msgs::PoseStamped lpp_data;
 Eigen::Vector4d u(4);
@@ -47,22 +46,14 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "apriltag_tracking_node");
     ros::NodeHandle nh;
     
-
-    ros::Publisher local_pos_pub_mavros = nh.advertise<mavros_msgs::PositionTarget>("mavros/setpoint_raw/local", 5);
-    ros::Subscriber at_sub = nh.subscribe<apriltag_ros::AprilTagDetectionArray>("/iris/usb_cam/tag_detections", 1, at_cb);
-    ros::Subscriber local_info_sub = nh.subscribe <geometry_msgs::PoseStamped> ("/mavros/local_position/pose", 10, lpp_callback);
+    ros::Subscriber at_sub = nh.subscribe<apriltag_ros::AprilTagDetectionArray>("/tag_detections", 1, at_cb);
+    ros::Subscriber local_info_sub = nh.subscribe <geometry_msgs::PoseStamped> ("/mavros/vision_position/pose", 10, lpp_callback);
     ros::Publisher target_body_pub = nh.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
     ros::Publisher target_lpp_pub = nh.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
     
     //the setpoint publishing rate MUST be faster than 2Hz
     ros::Rate rate(20.0);
 
-    mavros_msgs::PositionTarget pose_vel;
-    // Note that this type_mask is assuming you are affecting VELOCITY control over the vehicle.  See the original offboard example for the position type mask
-    //pose_vel.coordinate_frame = pose_vel.FRAME_BODY_NED;//pose_vel.FRAME_LOCAL_NED;
-    pose_vel.coordinate_frame = 1;
-    pose_vel.yaw = 3.14159/2;
-	pose_vel.type_mask = pose_vel.IGNORE_VX | pose_vel.IGNORE_VY | pose_vel.IGNORE_VZ | pose_vel.IGNORE_AFZ | pose_vel.IGNORE_AFY | pose_vel.IGNORE_AFX;
 
     ros::Time last_request = ros::Time::now();
 
@@ -74,11 +65,6 @@ int main(int argc, char **argv)
         if (at_in_data.detections.empty()) {
         ROS_WARN_STREAM("No AprilTags detected.");
         // Add any fallback behavior if necessary.
-        pose_vel.header.stamp = ros::Time::now();
-        pose_vel.position.x = lpp_data.pose.position.x;
-        pose_vel.position.y = lpp_data.pose.position.y;
-        pose_vel.position.z = 2.0; // in meters in local inertial frame
-        local_pos_pub_mavros.publish(pose_vel);
 
         continue; // Skip the rest of this iteration of the loop.
     }
@@ -92,7 +78,7 @@ int main(int argc, char **argv)
             ++count;
         }
 
-        if (count == 20) {
+        if (count == 100) {
             // recall rate is 20 Hz, therefore, 100 cycles is equivalent to 100 / 20 = 5 seconds
             at_in = 0;
         }
@@ -120,7 +106,7 @@ int main(int argc, char **argv)
         Eigen::Quaterniond quat_lpp(lpp_data.pose.orientation.w, lpp_data.pose.orientation.x, lpp_data.pose.orientation.y, lpp_data.pose.orientation.z);
         Eigen::Matrix3d R_lpp = quat_lpp.toRotationMatrix();
 
-        // Populating a homogenous transformation matrix with /mavros/local_position/pose data
+        // Populating a homogenous transformation matrix with /mavros/vision_position/pose data
         // converting quaternion to rotation matrix
         Eigen::Matrix4d H_lpp;
         H_lpp.block(0,0,4,4) = Eigen::Matrix4d::Constant(4,4, 0.0);
@@ -200,15 +186,8 @@ int main(int argc, char **argv)
             u = control_algorithm(r_DP_I, P_r_I);
         } else {
             // if we reach this, then either we are just starting up, or we haven't seen the april tag in 5 or more seconds (so at least 5 seconds)
-            ROS_INFO_STREAM("Haven't seen april tag at least 1 seconds");
+            ROS_INFO_STREAM("Haven't seen april tag at least 5 seconds");
         }
-        
-
-        pose_vel.header.stamp = ros::Time::now();
-        pose_vel.position.x = u(0);//u(1);
-        pose_vel.position.y = u(1);//u(0);
-        pose_vel.position.z = 1.5; // in meters in local inertial frame
-        local_pos_pub_mavros.publish(pose_vel);
         
         // ros::spinOnce();
         rate.sleep();

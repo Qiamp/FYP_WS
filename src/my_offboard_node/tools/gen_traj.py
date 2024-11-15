@@ -65,7 +65,7 @@ for i in range(len(points) - 1):
 q_w, q_x, q_y, q_z = 1.0, 0.0, 0.0, 0.0
 
 # 输出文件
-output_file = "/home/jay/FYP_WS/src/my_offboard_node/traj/p2p.txt"
+output_file = "~/FYP_WS/src/my_offboard_node/traj/p2p.txt"
 
 with open(output_file, "w") as file:
     for i in range(len(t_values)):

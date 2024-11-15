@@ -55,7 +55,7 @@ void vision_pose_cbk(const geometry_msgs::PoseStamped::ConstPtr& msg_in) {
 
 int main(int argc, char** argv) {
   YAML::Node traj_config = YAML::LoadFile(
-      "/home/jay/FYP_WS/src/my_offboard_node/config/traj.yaml");  // traj file path
+      "~/FYP_WS/src/my_offboard_node/config/traj.yaml");  // traj file path
   std::string file_name = traj_config["file_name"].as<std::string>();
   const float control_freq = traj_config["control_freq"].as<float>();
 
