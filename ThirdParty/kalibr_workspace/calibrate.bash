@@ -1,2 +1,0 @@
-rosrun kalibr kalibr_calibrate_cameras --target /home/jay/UAV_Workspace/kalibr_workspace/config/april_6x6_5.5x5.5_0.3.yaml --bag /home/jay/Data/calibrate_camera_imu.bag --models pinhole-radtan --topic /usb_cam/image_raw
-rosrun kalibr kalibr_calibrate_imu_camera --target /home/jay/UAV_Workspace/kalibr_workspace/config/april_6x6_5.5x5.5_0.3.yaml --cam /home/jay/UAV_Workspace/kalibr_workspace/Result/Camera/calibrate_camera_imu-camchain.yaml --imu /home/jay/UAV_Workspace/kalibr_workspace/Result/IMU/IMU.yaml --bag /home/jay/Data/calibrate_camera_imu.bag
