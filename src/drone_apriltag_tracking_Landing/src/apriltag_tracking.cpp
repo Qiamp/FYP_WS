@@ -120,7 +120,10 @@ int main(int argc, char **argv)
         // Camera is pointing 45 deg down looking forward. = tracking camera
         // This matrix takes points in the body frame and converts to camera frame
         Eigen::Matrix4d H_M_B;
-        H_M_B << 0,-1,0,0,-0.707,0,-0.707, 0, 0.707, 0, -0.707, 0, 0, 0, 0, 1;
+        H_M_B <<  0.00701443, -0.9999271,  -0.00982836,  0.00014258,
+                 -0.99786842, -0.00636162, -0.06494719,  0.00027211,
+                  0.06487993,  0.01026298, -0.9978403,  -0.00012072,
+                  0,           0,           0,           1;
 
         // create a vector with apriltag position relative to camera
         Eigen::Vector4d r4vec(4);
