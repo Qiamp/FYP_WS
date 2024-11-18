@@ -20,6 +20,7 @@ public:
 
         // Subscribers
         pose_sub = nh.subscribe("/mavros/vision_pose/pose", 10, &DroneController::poseCallback, this);
+        // apriltag_sub = nh.subscribe("/tag_detections/tagpose_inertial", 10, &DroneController::apriltagCallback, this);
 
         // Publishers
         vel_pub = nh.advertise<geometry_msgs::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
@@ -37,6 +38,17 @@ public:
     {
         current_position = *msg;
     }
+
+    // void aprilTagCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+    // {
+    //     if (msg->detections.size() > 0)
+    //     {
+    //         geometry_msgs::Point tag_pose = msg->detections[0].pose.pose.pose.position;
+    //         tag_position.pose.position.x = tag_pose.x;
+    //         tag_position.pose.position.y = tag_pose.y;
+    //         tag_position.pose.position.z = tag_pose.z;
+    //     }
+    // }
 
     void setMode(const std::string& mode)
     {
@@ -70,9 +82,9 @@ public:
 
     void gotoPosition(double x, double y, double z)
     {
-        target_position.pose.position.x = x;
-        target_position.pose.position.y = y;
-        target_position.pose.position.z = z;
+        target_position.pose.position.x = x; // + tag_position.pose.position.x;
+        target_position.pose.position.y = y; // + tag_position.pose.position.y;
+        target_position.pose.position.z = z; // + tag_position.pose.position.z;
 
         ros::Rate rate(20);  // 20 Hz
         while (ros::ok())
@@ -115,6 +127,7 @@ private:
     ros::ServiceClient arm_srv;
 
     geometry_msgs::PoseStamped target_position;
+    geometry_msgs::PoseStamped tag_position;
     geometry_msgs::PoseStamped current_position;
 };
 
@@ -123,11 +136,6 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "offboard_landing");
 
     DroneController controller;
-    controller.gotoPosition(0.0, 0.0, 1.0);  
-    controller.gotoPosition(2.0, 0.0, 1.0);   
-    controller.gotoPosition(2.0, 2.0, 1.0);   
-    controller.gotoPosition(0.0, 2.0, 1.0);  
-    controller.gotoPosition(0.0, 0.0, 1.0); 
-
+    controller.gotoPosition(0.0, 0.0, 1.7);
     return 0;
 }

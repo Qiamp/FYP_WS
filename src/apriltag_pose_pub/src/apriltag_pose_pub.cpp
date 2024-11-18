@@ -43,7 +43,7 @@ Eigen::Vector4d control_algorithm(const Eigen::Vector4d r_DP_I, const Eigen::Vec
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "apriltag_tracking_node");
+    ros::init(argc, argv, "apriltag_pose_pub");
     ros::NodeHandle nh;
     
     ros::Subscriber at_sub = nh.subscribe<apriltag_ros::AprilTagDetectionArray>("/tag_detections", 1, at_cb);

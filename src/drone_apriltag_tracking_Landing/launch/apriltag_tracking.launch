@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-
-<node name="apriltag_tracking_node" pkg="apriltag_tracking" type="apriltag_tracking_node" output="screen"/>
-
-
-</launch>

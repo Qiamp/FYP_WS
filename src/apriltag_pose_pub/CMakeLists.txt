@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(apriltag_tracking)
+project(apriltag_pose_pub)
 
 
 find_package(catkin REQUIRED COMPONENTS
@@ -51,7 +51,7 @@ catkin_package(
   CATKIN_DEPENDS roscpp sensor_msgs std_msgs geometry_msgs 
 )
 
-add_executable(${PROJECT_NAME}_node src/apriltag_tracking.cpp)
+add_executable(${PROJECT_NAME}_node src/apriltag_pose_pub.cpp)
 
 target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES})
 
