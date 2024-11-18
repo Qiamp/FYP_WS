@@ -1,0 +1,3 @@
+<launch>
+    <node name="offboard_landing" pkg="offboard_landing" type="offboard_landing" output="screen">
+</launch>
