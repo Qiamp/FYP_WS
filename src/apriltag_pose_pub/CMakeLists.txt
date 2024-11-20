@@ -51,11 +51,11 @@ catkin_package(
   CATKIN_DEPENDS roscpp sensor_msgs std_msgs geometry_msgs 
 )
 
-add_executable(${PROJECT_NAME}_node src/apriltag_pose_pub.cpp)
+add_executable(${PROJECT_NAME} src/apriltag_pose_pub.cpp)
 
-target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
-add_dependencies(${PROJECT_NAME}_node ${catkin_EXPORTED_TARGETS})
+add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
 
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
@@ -63,7 +63,7 @@ install(DIRECTORY launch/
 
 ## Mark executables and/or libraries for installation
 install(TARGETS
-  ${PROJECT_NAME}_node
+  ${PROJECT_NAME}
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

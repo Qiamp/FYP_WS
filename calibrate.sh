@@ -1,6 +1,6 @@
-
+#!/bin/bash
 source /opt/ros/noetic/setup.bash
-source /home/uav/FYP_WS/devel/setup.bash
+source ~/FYP_WS/devel/setup.bash
 
 
 echo "========== 1. Starting mavros =========="

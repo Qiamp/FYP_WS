@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 
         // Position of the apriltag in the camera coordinate frame.  Z coincident with optical axis; Y down in camera frame; X to the right when looking from vehicle out
         double xt = at_in_data.detections[0].pose.pose.pose.position.x;
-        double yt = at_in_data.detections[0].pose.pose.pose.position.y;
+        double yt = -at_in_data.detections[0].pose.pose.pose.position.y;
         double zt = at_in_data.detections[0].pose.pose.pose.position.z;
 
         // EIGEN's convention is to have the SCALAR value FIRST!!!
@@ -120,11 +120,10 @@ int main(int argc, char **argv)
         // Camera is pointing 45 deg down looking forward. = tracking camera
         // This matrix takes points in the body frame and converts to camera frame
         Eigen::Matrix4d H_M_B;
-        H_M_B <<  0.00701443, -0.9999271,  -0.00982836,  0.00014258,
-                 -0.99786842, -0.00636162, -0.06494719,  0.00027211,
-                  0.06487993,  0.01026298, -0.9978403,  -0.00012072,
+        H_M_B <<  0.05347634, -0.99235624,  0.11121772,  0.00010059,
+                 -0.980218,   -0.07342136, -0.18379872, -0.00017367,
+                  0.19055956, -0.09918873, -0.97665175, -0.00000866,
                   0,           0,           0,           1;
-
         // create a vector with apriltag position relative to camera
         Eigen::Vector4d r4vec(4);
         r4vec << xt,yt,zt,1;
