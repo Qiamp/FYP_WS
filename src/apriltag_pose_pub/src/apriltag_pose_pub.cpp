@@ -23,9 +23,9 @@ bool all_in = 0;
 
 
 void at_cb(const apriltag_ros::AprilTagDetectionArray::ConstPtr& at_msg){
-    ROS_INFO_STREAM("Callback function was called!");
     at_in_data = *at_msg; 
     at_in = 1;
+    ROS_INFO_STREAM("AprilTag Callback");
 }
 
 void lpp_callback(const geometry_msgs::PoseStamped::ConstPtr& lpp_msg) {
@@ -90,14 +90,14 @@ int main(int argc, char **argv)
         }
 
         
-        // The position of the drone relative to the local inertial frame (vehicle starts along y axis using indoor parameters)
+        // The position of the drone relative to the local inertial frame
         // Drone axes are x = forward, y = left, z = up (FLU)
         // Vehicle should start with initial orientation of 90 deg right; quaternion = (0,0,-0.707, -0.707)
         double xp = lpp_data.pose.position.x;
         double yp = lpp_data.pose.position.y;
         double zp = lpp_data.pose.position.z;
 
-        // Position of the apriltag in the camera coordinate frame.  Z coincident with optical axis; Y down in camera frame; X to the right when looking from vehicle out
+        // Position of the apriltag in the camera coordinate frame.  
         double xt = at_in_data.detections[0].pose.pose.pose.position.x;
         double yt = -at_in_data.detections[0].pose.pose.pose.position.y;
         double zt = at_in_data.detections[0].pose.pose.pose.position.z;
@@ -116,8 +116,6 @@ int main(int argc, char **argv)
         H_lpp(1,3) = yp;
         H_lpp(2,3) = zp;
 
-        // A fixed homogenous transformation (zero translation) to convert between camera frame and local body FLU frame
-        // Camera is pointing 45 deg down looking forward. = tracking camera
         // This matrix takes points in the body frame and converts to camera frame
         Eigen::Matrix4d H_M_B;
         H_M_B <<  0.05347634, -0.99235624,  0.11121772,  0.00010059,
@@ -130,7 +128,6 @@ int main(int argc, char **argv)
 
         // Rotate the apriltag position from camera coordinates to FLU coordinates
         // inverse H_M_B converts from camera to body coordinates.
-        // Note: For unitary transformation (unitary rotation matrix) transpose of matrix = inverse of matrix
         Eigen::Vector4d P_r_B(4);
         P_r_B = H_M_B.inverse()*r4vec;
 
@@ -163,16 +160,16 @@ int main(int argc, char **argv)
         geometry_msgs::PoseStamped body_pub_data;
         body_pub_data.header.stamp = lpp_data.header.stamp;
         body_pub_data.pose.position.x = P_r_B(0);
-        body_pub_data.pose.position.y = P_r_B(1);
-        body_pub_data.pose.position.z = P_r_B(2);
+        body_pub_data.pose.position.y = -P_r_B(1);
+        body_pub_data.pose.position.z = -P_r_B(2);
         target_body_pub.publish(body_pub_data);
 
         // populate and publish the apriltag in inertial coordinates
         geometry_msgs::PoseStamped lpp_pub_data;
         lpp_pub_data.header.stamp = lpp_data.header.stamp;
-        lpp_pub_data.pose.position.x = P_r_I(0);
-        lpp_pub_data.pose.position.y = P_r_I(1);
-        lpp_pub_data.pose.position.z = P_r_I(2);
+        lpp_pub_data.pose.position.x = P_r_I(0) - 0.22;
+        lpp_pub_data.pose.position.y = -P_r_I(1) - 0.12;
+        lpp_pub_data.pose.position.z = -P_r_I(2) + 0.14;
         target_lpp_pub.publish(lpp_pub_data);
 
 
