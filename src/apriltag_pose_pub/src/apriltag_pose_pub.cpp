@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 
         // Position of the apriltag in the camera coordinate frame.  
         double xt = at_in_data.detections[0].pose.pose.pose.position.x;
-        double yt = -at_in_data.detections[0].pose.pose.pose.position.y;
+        double yt = at_in_data.detections[0].pose.pose.pose.position.y;
         double zt = at_in_data.detections[0].pose.pose.pose.position.z;
 
         // EIGEN's convention is to have the SCALAR value FIRST!!!
@@ -122,6 +122,10 @@ int main(int argc, char **argv)
                  -0.980218,   -0.07342136, -0.18379872, -0.00017367,
                   0.19055956, -0.09918873, -0.97665175, -0.00000866,
                   0,           0,           0,           1;
+        // H_M_B <<  0.76329129, -0.31445382,  0.56436265, -0.06274611,
+        //          -0.39852385,  0.45837819,  0.794398,    0.0265365,
+        //          -0.50849301, -0.83126905,  0.22455873,  0.1471095,
+        //           0,           0,           0,           1;
         // create a vector with apriltag position relative to camera
         Eigen::Vector4d r4vec(4);
         r4vec << xt,yt,zt,1;
@@ -167,9 +171,9 @@ int main(int argc, char **argv)
         // populate and publish the apriltag in inertial coordinates
         geometry_msgs::PoseStamped lpp_pub_data;
         lpp_pub_data.header.stamp = lpp_data.header.stamp;
-        lpp_pub_data.pose.position.x = P_r_I(0) - 0.22;
-        lpp_pub_data.pose.position.y = -P_r_I(1) - 0.12;
-        lpp_pub_data.pose.position.z = -P_r_I(2) + 0.14;
+        lpp_pub_data.pose.position.x = P_r_I(0) - 0.42;
+        lpp_pub_data.pose.position.y = P_r_I(1) - 0.12;
+        lpp_pub_data.pose.position.z = -P_r_I(2) + 0.7471095;
         target_lpp_pub.publish(lpp_pub_data);
 
 

@@ -4,6 +4,7 @@
 #include <geometry_msgs/Twist.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/CommandBool.h>
+#include <mavros_msgs/ExtendedState.h>
 #include <cmath>
 
 class DroneController
@@ -31,6 +32,7 @@ public:
         pose_sub = nh.subscribe("/mavros/vision_pose/pose", 10, &DroneController::poseCallback, this);
         apriltag_sub = nh.subscribe("/tag_detections/tagpose_inertial", 10, &DroneController::apriltagCallback, this);
         state_sub = nh.subscribe("/mavros/state", 10, &DroneController::stateCallback, this);
+        extended_state_sub = nh.subscribe("/mavros/extended_state", 10, &DroneController::extendedStateCallback, this);
 
         // Publishers
         vel_pub = nh.advertise<geometry_msgs::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
@@ -41,7 +43,7 @@ public:
 
         // Set mode to OFFBOARD and arm the drone
         setMode("OFFBOARD");
-        arm(true);
+        arm();
     }
 
     void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg)
@@ -73,6 +75,11 @@ public:
         }
     }
 
+    void extendedStateCallback(const mavros_msgs::ExtendedState::ConstPtr& msg) 
+    {
+        extended_state = *msg;
+    }
+
     void setMode(const std::string& mode)
     {
         mavros_msgs::SetMode set_mode_msg;
@@ -89,10 +96,10 @@ public:
     }
 
 
-    void arm(bool arm)
+    void arm()
     {
         mavros_msgs::CommandBool arm_msg;
-        arm_msg.request.value = arm;
+        arm_msg.request.value = true;
 
         if (arm_srv.call(arm_msg) && arm_msg.response.success)
         {
@@ -104,24 +111,76 @@ public:
         }
     }
 
-    void land()
+    void disarm()
     {
-        setMode("AUTO.LAND");
+        mavros_msgs::CommandBool disarm_msg;
+        disarm_msg.request.value = false;
 
-        ros::Rate rate(10);  // 10 Hz
-        while (ros::ok())
+        if (arm_srv.call(disarm_msg) && disarm_msg.response.success)
         {
-            if (current_state.mode == "AUTO.LAND" && tag_position.pose.position.z < 0.1)  //Need to modify this condition, this condition is not rigorous
+            ROS_INFO("Drone disarmed");
+        }
+        else
+        {
+            ROS_ERROR("Failed to disarm the drone");
+        }
+    }
+
+    void land() {
+        setMode("AUTO.LAND");
+        ros::Rate rate(10);
+        ros::Time start_time = ros::Time::now();
+        bool landing_confirmed = false;
+
+        while (ros::ok()) 
+        {
+            ros::spinOnce();  // 确保获取最新状态
+
+            // 状态机判断逻辑
+            if (!landing_confirmed) 
             {
-                ROS_INFO("Landing completed successfully");
-                arm(false);
+                // 阶段1：等待进入着陆模式
+                if (current_state.mode != "AUTO.LAND") {
+                    ROS_WARN_THROTTLE(5, "Waiting for AUTO.LAND mode...");
+                    setMode("AUTO.LAND");
+                } else {
+                    ROS_INFO("AUTO.LAND mode activated");
+                    landing_confirmed = true;
+                }
+            } 
+            else 
+            {
+                // 阶段2：检测着陆完成条件
+                const bool is_landed = (extended_state.landed_state == 
+                                       mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND);
+                const bool mode_changed = (current_state.mode != "AUTO.LAND");
+
+                // 官方建议的完成条件优先级
+                if (is_landed) {
+                    ROS_INFO("Landed state confirmed by FCU");
+                    break;
+                } else if (mode_changed) {
+                    ROS_INFO("Flight mode changed to %s, assuming landing completed", 
+                            current_state.mode.c_str());
+                    break;
+                } else if (current_position.pose.position.z < 0.15) {
+                    ROS_WARN("Height below 0.15m but no landed state, check sensors!");
+                    break;
+                }
+            }
+
+            // 超时保护（PX4标准着陆超时为90秒）
+            if ((ros::Time::now() - start_time).toSec() > 90.0) {
+                ROS_ERROR("Landing timeout! Forcing disarm.");
                 break;
             }
 
-            arm(false);
-
             rate.sleep();
-            ros::spinOnce();
+        }
+
+        // 最终上锁
+        if (current_state.armed) {
+            disarm();
         }
     }
 
@@ -197,6 +256,7 @@ private:
     ros::Subscriber state_sub;
     ros::Subscriber pose_sub;
     ros::Subscriber apriltag_sub;
+    ros::Subscriber extended_state_sub;
     ros::Publisher vel_pub;
     ros::ServiceClient set_mode_srv;
     ros::ServiceClient arm_srv;
@@ -205,6 +265,7 @@ private:
     geometry_msgs::PoseStamped target_position;
     geometry_msgs::PoseStamped tag_position;
     geometry_msgs::PoseStamped current_position;
+    mavros_msgs::ExtendedState extended_state; 
 
 };
 
@@ -213,7 +274,10 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "offboard_landing");
 
     DroneController controller;
-    controller.gotoPosition(0.0, 0.0, 1.0);
+    controller.gotoPosition(0.0, 0.0, 0.5);
+
+    //Comment out the following code if you want to land at GPS position
+    /*
     if (controller.seenTag)
     {
         controller.gotoAirport();
@@ -222,6 +286,8 @@ int main(int argc, char** argv)
     {
         ROS_INFO("No AprilTag detected. Landing at GPS position");
     }
+    */
+
     controller.land();
     return 0;
 }
