@@ -132,8 +132,15 @@ int main(int argc, char **argv)
 
         // Rotate the apriltag position from camera coordinates to FLU coordinates
         // inverse H_M_B converts from camera to body coordinates.
+        Eigen::Vector4d P_r_B_ROS(4);
         Eigen::Vector4d P_r_B(4);
-        P_r_B = H_M_B.inverse()*r4vec;
+        P_r_B_ROS = H_M_B.inverse()*r4vec; //ENU
+        Eigen::Matrix3d R_ENU2FLU;
+        R_ENU2FLU << 0,  1,  0,
+                    -1,  0,  0,
+                     0,  0,  1;
+        Eigen::Vector3d tmp_FLU = R_ENU2FLU * P_r_B_ROS.head<3>();
+        P_r_B << tmp_FLU, 1.0;
 
         Eigen::Vector4d P_r_I(4);
         P_r_I = H_lpp*P_r_B;
@@ -164,8 +171,8 @@ int main(int argc, char **argv)
         geometry_msgs::PoseStamped body_pub_data;
         body_pub_data.header.stamp = lpp_data.header.stamp;
         body_pub_data.pose.position.x = P_r_B(0);
-        body_pub_data.pose.position.y = -P_r_B(1);
-        body_pub_data.pose.position.z = -P_r_B(2);
+        body_pub_data.pose.position.y = P_r_B(1);
+        body_pub_data.pose.position.z = P_r_B(2);
         target_body_pub.publish(body_pub_data);
 
         // populate and publish the apriltag in inertial coordinates
@@ -173,7 +180,7 @@ int main(int argc, char **argv)
         lpp_pub_data.header.stamp = lpp_data.header.stamp;
         lpp_pub_data.pose.position.x = P_r_I(0) - 0.42;
         lpp_pub_data.pose.position.y = P_r_I(1) - 0.12;
-        lpp_pub_data.pose.position.z = -P_r_I(2) + 0.7471095;
+        lpp_pub_data.pose.position.z = P_r_I(2) + 0.7471095;
         target_lpp_pub.publish(lpp_pub_data);
 
 
