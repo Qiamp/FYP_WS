@@ -175,6 +175,8 @@ public:
                 break;
             }
 
+            //Need Fixe
+
             rate.sleep();
         }
 
@@ -274,7 +276,7 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "offboard_landing");
 
     DroneController controller;
-    controller.gotoPosition(0.0, 0.0, 0.5);
+    // controller.gotoPosition(0.0, 0.0, 0.5);
 
     //Comment out the following code if you want to land at GPS position
     /*

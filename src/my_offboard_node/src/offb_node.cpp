@@ -9,6 +9,8 @@
 #include <mavros_msgs/CommandTOL.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
+#include <mavros_msgs/ExtendedState.h>
+
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>
 
@@ -23,8 +25,10 @@ using namespace std;
 
 mavros_msgs::State current_state;
 geometry_msgs::PoseStamped current_pose;
-geometry_msgs::PoseStamped init_pose;
+// geometry_msgs::PoseStamped init_pose;
 Eigen::Isometry3d init_odom_pose = Eigen::Isometry3d::Identity();  
+mavros_msgs::ExtendedState extended_state; 
+ros::ServiceClient set_mode_client;
 //Isometry3d 是一个 4x4 的变换矩阵，左上角的 3x3 子矩阵表示旋转，右上角的 3x1 列向量表示平移
 //初始化位置与旋转矩阵为单位矩阵I(Identity)(无旋转&平移)
 
@@ -45,6 +49,12 @@ void vision_pose_cbk(const geometry_msgs::PoseStamped::ConstPtr& msg_in) {
                                                 msg_in->pose.position.z));
     is_odom_init = true;  //标志位，初始位置已经初始化
   }
+  current_pose = *msg_in;
+}
+
+void extendedStateCallback(const mavros_msgs::ExtendedState::ConstPtr& msg) 
+{
+    extended_state = *msg;
 }
 
 // int _uav_pose_pinrt = 0;
@@ -53,12 +63,27 @@ void vision_pose_cbk(const geometry_msgs::PoseStamped::ConstPtr& msg_in) {
 //   _uav_pose_pinrt++;
 // }
 
+void setMode(const std::string& mode)
+{
+    mavros_msgs::SetMode set_mode_msg;
+    set_mode_msg.request.custom_mode = mode;
+
+    if (set_mode_client.call(set_mode_msg) && set_mode_msg.response.mode_sent)
+    {
+        ROS_INFO("Set mode to %s", mode.c_str());
+    }
+    else
+    {
+        ROS_ERROR("Failed to set mode to %s", mode.c_str());
+    }
+}
+
 int main(int argc, char** argv) {
   YAML::Node traj_config = YAML::LoadFile(
-      "~/FYP_WS/src/my_offboard_node/config/traj.yaml");  // traj file path
+      "/home/uav/FYP_WS/src/my_offboard_node/config/traj.yaml");  // traj file path
   std::string file_name = traj_config["file_name"].as<std::string>();
   const float control_freq = traj_config["control_freq"].as<float>();
-
+  bool confirm_landing = false;
   ros::init(argc, argv, "offb_node");
   ros::NodeHandle nh;
 
@@ -66,14 +91,18 @@ int main(int argc, char** argv) {
       nh.subscribe("mavros/vision_pose/pose", 1000, vision_pose_cbk);
   ros::Subscriber state_sub =
       nh.subscribe<mavros_msgs::State>("mavros/state", 10, state_cb);
+  ros::Subscriber extended_state_sub = nh.subscribe("/mavros/extended_state", 10, extendedStateCallback);
+
   ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>(
       "mavros/setpoint_position/local", 10);
   ros::ServiceClient arming_client =
       nh.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
-  ros::ServiceClient land_client =
-      nh.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
-  ros::ServiceClient set_mode_client =
+  // ros::ServiceClient land_client =
+  //     nh.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
+  set_mode_client =
       nh.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+  // set_mode_srv = nh.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
+
 
   // ros::Subscriber sub = nh.subscribe<geometry_msgs::PoseStamped>(
   //     "/mavros/vision_pose/pose", 1, uav_pose_cb);
@@ -177,14 +206,19 @@ int main(int argc, char** argv) {
     rate.sleep();
   }
 
-  control.pose.position.x = current_pose.pose.position.x;
-  control.pose.position.y = current_pose.pose.position.y;
-  control.pose.position.z = current_pose.pose.position.z;
-  init_pose = current_pose;
+  // control.pose.position.x = current_pose.pose.position.x;
+  // control.pose.position.y = current_pose.pose.position.y;
+  // control.pose.position.z = current_pose.pose.position.z;
+  // init_pose = current_pose;
 
+  int index = trajs.size();
+  if(index <= 0){
+    ROS_INFO("No trajectory points");
+    return 0;
+  }
   // go to the hover waypoint
-  for (int index = 300; ros::ok() && index > 0; --index) {
-    trj_state = trajs[0];
+  for (index = trajs.size() - 1; ros::ok() && index > 0; --index) {
+    trj_state = trajs[index];
     control.pose.position.x = trj_state.pos.x();
     control.pose.position.y = trj_state.pos.y();
     control.pose.position.z = trj_state.pos.z();
@@ -193,32 +227,53 @@ int main(int argc, char** argv) {
     control.pose.orientation.y = trj_state.rotation.y();
     control.pose.orientation.z = trj_state.rotation.z();
     local_pos_pub.publish(control);
+    std::cout << "control: " << index << " " << control.pose.position.x << " "
+              << control.pose.position.y << " " << control.pose.position.z
+              << std::endl;
     ros::spinOnce();
     rate.sleep();
   }
 
-  int index = trajs.size();
-  while (index-- && ros::ok()) {
-    trj_state = trajs[trajs.size() - index];
-    control.pose.position.x = trj_state.pos.x();
-    control.pose.position.y = trj_state.pos.y();
-    control.pose.position.z = trj_state.pos.z();
-    //        control.pose.orientation.w = trj_state.rotation.w();
-    //        control.pose.orientation.x = trj_state.rotation.x();
-    //        control.pose.orientation.y = trj_state.rotation.y();
-    //        control.pose.orientation.z = trj_state.rotation.z();
-    std::cout << "Position control: " << index << " " << control.pose.position.x
-              << " " << control.pose.position.y << " "
-              << control.pose.position.z << std::endl;
-    local_pos_pub.publish(control);
-    ros::spinOnce();
-    rate.sleep();
+  if (index == 0) {
+    confirm_landing = true;
+    ROS_INFO("Reached the last point, landing");
+    if (current_state.mode != "POSCTL")
+      {
+        setMode("POSCTL");
+        ros::Duration(3.0).sleep();
+      }
   }
 
-  ROS_INFO("tring to land");
-  while (!(land_client.call(land_cmd) && land_cmd.response.success)) {
-    // local_pos_pub.publish(pose);
-    ROS_INFO("tring to land");
+  bool land_done = false;
+  while (confirm_landing && ros::ok()) {
+    if (!land_done){
+      // 阶段1：等待进入着陆模式
+      if (current_state.mode != "AUTO.LAND") {
+        ROS_WARN_THROTTLE(5, "Waiting for AUTO.LAND mode...");
+        setMode("AUTO.LAND");
+      } else {
+          ROS_INFO("AUTO.LAND mode activated");
+          land_done = true;
+      }
+    } else {
+      // 阶段2：检测着陆完成条件
+      const bool is_landed = (extended_state.landed_state == 
+                              mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND);
+      const bool mode_changed = (current_state.mode != "AUTO.LAND");
+
+      // 官方建议的完成条件优先级
+      if (is_landed) {
+          ROS_INFO("Landed state confirmed by FCU");
+          break;
+      } else if (mode_changed) {
+          ROS_INFO("Flight mode changed to %s, assuming landing completed", 
+                  current_state.mode.c_str());
+          break;
+      } else if (current_pose.pose.position.z < 0.15) {
+          ROS_WARN("Height below 0.15m but no landed state, check sensors!");
+          break;
+      }
+    }
     ros::spinOnce();
     rate.sleep();
   }
