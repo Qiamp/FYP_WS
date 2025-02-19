@@ -6,7 +6,6 @@
 
 struct AprilTagTransformer {
     AprilTagTransformer() : nh_("~") {
-        // 初始化订阅器和发布器
         drone_pose_sub_ = nh_.subscribe("/mavros/vision_pose/pose", 10, 
             &AprilTagTransformer::dronePoseCallback, this);
         april_tag_sub_ = nh_.subscribe("/tag_detections", 10,
@@ -15,7 +14,6 @@ struct AprilTagTransformer {
         body_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
         inertial_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
 
-        // 初始化固定变换矩阵（示例值，需要根据实际标定结果修改）
         initTransforms();
     }
 
@@ -26,29 +24,16 @@ struct AprilTagTransformer {
     geometry_msgs::PoseStamped current_drone_pose_;
     bool has_drone_pose_ = false;
     
-    // 使用Eigen的等距变换类型存储坐标变换
     Eigen::Isometry3d T_body_camera_;  // 相机到机体的变换
 
     void initTransforms() {
-        /******************************************************************
-        * 初始化相机到机体的固定变换矩阵 (T_body_camera)
-        * 需要根据实际标定结果设置旋转矩阵和平移向量
-        * 示例值：
-        *   R = [-0.02215281  -0.99669549  -0.07814961
-        *        -0.99769073   0.0270596   -0.06229757
-        *         0.0642064    0.07658907  -0.99499329]
-        *   t = [0.00427512, -0.00026231, -0.00273313]
-        ******************************************************************/
         T_body_camera_ = Eigen::Isometry3d::Identity();
         
-        // 设置旋转矩阵
         Eigen::Matrix3d rotation;
         rotation << -0.02215281, -0.99669549, -0.07814961,
                     -0.99769073,  0.0270596,  -0.06229757,
                      0.0642064,   0.07658907, -0.99499329;
         T_body_camera_.linear() = rotation;
-
-        // 设置平移向量 (单位：米)
         T_body_camera_.translation() << 0.00, -0.000, -0.00;
     }
 
@@ -58,86 +43,87 @@ struct AprilTagTransformer {
     }
 
     void aprilTagCallback(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg) {
-        if (msg->detections.empty()) {
-            ROS_WARN_THROTTLE(1, "No AprilTag detected");
-            return;
-        }
+        if (msg->detections.empty()) return;
 
-        // 使用第一个检测到的标签
         const auto& detection = msg->detections[0];
-        const auto& tag_in_camera = detection.pose.pose.pose.position;
+        const auto& tag_pose_camera = detection.pose.pose.pose;
 
         try {
+            // 转换姿态到机体坐标系
+            Eigen::Isometry3d pose_camera = Eigen::Isometry3d::Identity();
+            pose_camera.translation() << tag_pose_camera.position.x,
+                                        tag_pose_camera.position.y,
+                                        tag_pose_camera.position.z;
+            pose_camera.linear() = Eigen::Quaterniond(
+                tag_pose_camera.orientation.w,
+                tag_pose_camera.orientation.x,
+                tag_pose_camera.orientation.y,
+                tag_pose_camera.orientation.z
+            ).toRotationMatrix();
 
-            // 将Apriltag的位置从相机坐标系转换到机体坐标系
-            Eigen::Vector3d tag_in_body = cameraToBody(tag_in_camera);
+            // 相机到机体的完整变换
+            Eigen::Isometry3d pose_body = T_body_camera_ * pose_camera;
 
+            // 发布机体坐标系下的完整姿态
+            publishBodyPose(pose_body, msg->header.stamp);
 
-            // 发布apriltag相对于body_link的位置
-            publishBodyPose(tag_in_body, msg->header.stamp);
+            if (!has_drone_pose_) return;
 
-            if (!has_drone_pose_) {
-                ROS_WARN_THROTTLE(1, "Waiting for drone pose...");
-                return;
-            }
+            // 转换到惯性坐标系
+            Eigen::Isometry3d T_inertial_body = Eigen::Isometry3d::Identity();
+            T_inertial_body.linear() = Eigen::Quaterniond(
+                current_drone_pose_.pose.orientation.w,
+                current_drone_pose_.pose.orientation.x,
+                current_drone_pose_.pose.orientation.y,
+                current_drone_pose_.pose.orientation.z
+            ).toRotationMatrix();
+            T_inertial_body.translation() << current_drone_pose_.pose.position.x,
+                                           current_drone_pose_.pose.position.y,
+                                           current_drone_pose_.pose.position.z;
 
-            // 将Apriltag的位置从机体坐标系转换到惯性坐标系
-            Eigen::Vector3d body_in_inertial = bodyToInertial(tag_in_body);
+            Eigen::Isometry3d pose_inertial = T_inertial_body * pose_body;
 
-            // 发布apriltag相对于map的位置
-            publishInertialPose(body_in_inertial, msg->header.stamp);
+            publishInertialPose(pose_inertial, msg->header.stamp);
         } catch (const std::exception& e) {
             ROS_ERROR("Transform error: %s", e.what());
         }
     }
 
-    Eigen::Vector3d cameraToBody(const geometry_msgs::Point& point) {
-        // 将点从相机坐标系转换到机体坐标系
-        Eigen::Vector3d p_camera(point.x, point.y, point.z);
-        Eigen::Vector3d p_body = T_body_camera_ * p_camera;
-        return p_body;
-    }
-
-    Eigen::Vector3d bodyToInertial(const Eigen::Vector3d& point) {
-        // 构造无人机当前位姿的变换矩阵
-        Eigen::Isometry3d T_inertial_body = Eigen::Isometry3d::Identity();
-        
-        // 设置旋转
-        Eigen::Quaterniond q(
-            current_drone_pose_.pose.orientation.w,
-            current_drone_pose_.pose.orientation.x,
-            current_drone_pose_.pose.orientation.y,
-            current_drone_pose_.pose.orientation.z
-        );
-        T_inertial_body.linear() = q.toRotationMatrix();
-
-        // 设置平移
-        T_inertial_body.translation() << 
-            current_drone_pose_.pose.position.x,
-            current_drone_pose_.pose.position.y,
-            current_drone_pose_.pose.position.z;
-
-        // 执行坐标变换
-        return T_inertial_body * point;
-    }
-
-    void publishBodyPose(const Eigen::Vector3d& position, const ros::Time& stamp) {
+    void publishBodyPose(const Eigen::Isometry3d& pose, const ros::Time& stamp) {
         geometry_msgs::PoseStamped msg;
         msg.header.stamp = stamp;
-        msg.header.frame_id = "body_link";  // 机体坐标系
-        msg.pose.position.x = position.x();
-        msg.pose.position.y = position.y();
-        msg.pose.position.z = position.z();
+        msg.header.frame_id = "body_link";
+        
+        // 位置
+        msg.pose.position.x = pose.translation().x();
+        msg.pose.position.y = pose.translation().y();
+        msg.pose.position.z = pose.translation().z();
+        
+        // 方向
+        Eigen::Quaterniond q(pose.linear());
+        msg.pose.orientation.w = q.w();
+        msg.pose.orientation.x = q.x();
+        msg.pose.orientation.y = q.y();
+        msg.pose.orientation.z = q.z();
+        
         body_pose_pub_.publish(msg);
     }
 
-    void publishInertialPose(const Eigen::Vector3d& position, const ros::Time& stamp) {
+    void publishInertialPose(const Eigen::Isometry3d& pose, const ros::Time& stamp) {
         geometry_msgs::PoseStamped msg;
         msg.header.stamp = stamp;
-        msg.header.frame_id = "map";  // 惯性坐标系
-        msg.pose.position.x = position.x();
-        msg.pose.position.y = position.y();
-        msg.pose.position.z = position.z();
+        msg.header.frame_id = "map";
+        
+        msg.pose.position.x = pose.translation().x();
+        msg.pose.position.y = pose.translation().y();
+        msg.pose.position.z = pose.translation().z();
+        
+        Eigen::Quaterniond q(pose.linear());
+        msg.pose.orientation.w = q.w();
+        msg.pose.orientation.x = q.x();
+        msg.pose.orientation.y = q.y();
+        msg.pose.orientation.z = q.z();
+        
         inertial_pose_pub_.publish(msg);
     }
 };
