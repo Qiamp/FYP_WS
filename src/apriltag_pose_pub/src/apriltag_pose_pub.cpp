@@ -1,209 +1,150 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <mavros_msgs/CommandBool.h>
-#include <mavros_msgs/SetMode.h>
-#include <mavros_msgs/State.h>
-#include <mavros_msgs/PositionTarget.h>
-#include <mavros_msgs/CommandBool.h>
-#include <mavros_msgs/GlobalPositionTarget.h>
-#include <sensor_msgs/Joy.h>
-#include <geometry_msgs/PoseStamped.h>
-#include "apriltag_ros/AprilTagDetectionArray.h"
-#include <Eigen/Dense>
+#include <apriltag_ros/AprilTagDetectionArray.h>
+#include <Eigen/Geometry>
+#include <memory>
 
-apriltag_ros::AprilTagDetectionArray at_in_data;
-geometry_msgs::PoseStamped lpp_data;
-Eigen::Vector4d u(4);
-unsigned previous_at_in_seq{0};
+struct AprilTagTransformer {
+    AprilTagTransformer() : nh_("~") {
+        // 初始化订阅器和发布器
+        drone_pose_sub_ = nh_.subscribe("/mavros/vision_pose/pose", 10, 
+            &AprilTagTransformer::dronePoseCallback, this);
+        april_tag_sub_ = nh_.subscribe("/tag_detections", 10,
+            &AprilTagTransformer::aprilTagCallback, this);
+        
+        body_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
+        inertial_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
 
-
-bool lpp_data_in = 0;
-bool at_in = 0;
-bool all_in = 0;
-
-
-void at_cb(const apriltag_ros::AprilTagDetectionArray::ConstPtr& at_msg){
-    at_in_data = *at_msg; 
-    at_in = 1;
-    ROS_INFO_STREAM("AprilTag Callback");
-}
-
-void lpp_callback(const geometry_msgs::PoseStamped::ConstPtr& lpp_msg) {
-    lpp_data = *lpp_msg;
-    lpp_data_in = 1; 
-}
-
-/**
- * r_PO_I is a 4x1 vector. The first 3 elements of which are the position of the april tag in the inertial frame
- * r_DP_I is a 4x1 vector. The first 3 elements of which are the desired position between the drone and the april tag in the inertial frame
- */
-Eigen::Vector4d control_algorithm(const Eigen::Vector4d r_DP_I, const Eigen::Vector4d r_PO_I) {
-    return (r_DP_I + r_PO_I);
-}
-
-int main(int argc, char **argv)
-{
-    ros::init(argc, argv, "apriltag_pose_pub");
-    ros::NodeHandle nh;
-    
-    ros::Subscriber at_sub = nh.subscribe<apriltag_ros::AprilTagDetectionArray>("/tag_detections", 1, at_cb);
-    ros::Subscriber local_info_sub = nh.subscribe <geometry_msgs::PoseStamped> ("/mavros/vision_position/pose", 10, lpp_callback);
-    ros::Publisher target_body_pub = nh.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
-    ros::Publisher target_lpp_pub = nh.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
-    
-    //the setpoint publishing rate MUST be faster than 2Hz
-    ros::Rate rate(20.0);
-
-
-    ros::Time last_request = ros::Time::now();
-
-    int count = 0;
-
-    while(ros::ok()) {
-
-        ros::spinOnce();
-        if (at_in_data.detections.empty()) {
-        ROS_WARN_STREAM("No AprilTags detected.");
-        // Add any fallback behavior if necessary.
-
-        continue; // Skip the rest of this iteration of the loop.
+        // 初始化固定变换矩阵（示例值，需要根据实际标定结果修改）
+        initTransforms();
     }
 
+    ros::NodeHandle nh_;
+    ros::Subscriber drone_pose_sub_, april_tag_sub_;
+    ros::Publisher body_pose_pub_, inertial_pose_pub_;
+    
+    geometry_msgs::PoseStamped current_drone_pose_;
+    bool has_drone_pose_ = false;
+    
+    // 使用Eigen的等距变换类型存储坐标变换
+    Eigen::Isometry3d T_body_camera_;  // 相机到机体的变换
 
-        if (previous_at_in_seq != at_in_data.header.seq) {
-            previous_at_in_seq = (unsigned)at_in_data.header.seq;
-            count = 0;
-            ROS_INFO_STREAM("SEEN APRILTAG!!");
-        } else {
-            ++count;
-        }
-
-        if (count == 60) {
-            // recall rate is 20 Hz, therefore, 100 cycles is equivalent to 100 / 20 = 3 seconds
-            at_in = 0;
-        }
-
-        if(at_in && lpp_data_in){
-            all_in = 1;
-        } else {
-            all_in = 0;
-        }
-
+    void initTransforms() {
+        /******************************************************************
+        * 初始化相机到机体的固定变换矩阵 (T_body_camera)
+        * 需要根据实际标定结果设置旋转矩阵和平移向量
+        * 示例值：
+        *   R = [-0.02215281  -0.99669549  -0.07814961
+        *        -0.99769073   0.0270596   -0.06229757
+        *         0.0642064    0.07658907  -0.99499329]
+        *   t = [0.00427512, -0.00026231, -0.00273313]
+        ******************************************************************/
+        T_body_camera_ = Eigen::Isometry3d::Identity();
         
-        // The position of the drone relative to the local inertial frame
-        // Drone axes are x = forward, y = left, z = up (FLU)
-        // Vehicle should start with initial orientation of 90 deg right; quaternion = (0,0,-0.707, -0.707)
-        double xp = lpp_data.pose.position.x;
-        double yp = lpp_data.pose.position.y;
-        double zp = lpp_data.pose.position.z;
+        // 设置旋转矩阵
+        Eigen::Matrix3d rotation;
+        rotation << -0.02215281, -0.99669549, -0.07814961,
+                    -0.99769073,  0.0270596,  -0.06229757,
+                     0.0642064,   0.07658907, -0.99499329;
+        T_body_camera_.linear() = rotation;
 
-        // Position of the apriltag in the camera coordinate frame.  
-        double xt = at_in_data.detections[0].pose.pose.pose.position.x;
-        double yt = at_in_data.detections[0].pose.pose.pose.position.y;
-        double zt = at_in_data.detections[0].pose.pose.pose.position.z;
-
-        // EIGEN's convention is to have the SCALAR value FIRST!!!
-        Eigen::Quaterniond quat_lpp(lpp_data.pose.orientation.w, lpp_data.pose.orientation.x, lpp_data.pose.orientation.y, lpp_data.pose.orientation.z);
-        Eigen::Matrix3d R_lpp = quat_lpp.toRotationMatrix();
-
-        // Populating a homogenous transformation matrix with /mavros/vision_position/pose data
-        // converting quaternion to rotation matrix
-        Eigen::Matrix4d H_lpp;
-        H_lpp.block(0,0,4,4) = Eigen::Matrix4d::Constant(4,4, 0.0);
-        H_lpp.block(0,0,3,3) = R_lpp;
-        H_lpp(3,3) = 1.0;
-        H_lpp(0,3) = xp;
-        H_lpp(1,3) = yp;
-        H_lpp(2,3) = zp;
-
-        // This matrix takes points in the body frame and converts to camera frame
-        Eigen::Matrix4d H_M_B;
-        H_M_B <<  0.05347634, -0.99235624,  0.11121772,  0.00010059,
-                 -0.980218,   -0.07342136, -0.18379872, -0.00017367,
-                  0.19055956, -0.09918873, -0.97665175, -0.00000866,
-                  0,           0,           0,           1;
-        // H_M_B <<  0.76329129, -0.31445382,  0.56436265, -0.06274611,
-        //          -0.39852385,  0.45837819,  0.794398,    0.0265365,
-        //          -0.50849301, -0.83126905,  0.22455873,  0.1471095,
-        //           0,           0,           0,           1;
-        // create a vector with apriltag position relative to camera
-        Eigen::Vector4d r4vec(4);
-        r4vec << xt,yt,zt,1;
-
-        // Rotate the apriltag position from camera coordinates to FLU coordinates
-        // inverse H_M_B converts from camera to body coordinates.
-        Eigen::Vector4d P_r_B_ROS(4);
-        Eigen::Vector4d P_r_B(4);
-        P_r_B_ROS = H_M_B.inverse()*r4vec; //ENU
-        Eigen::Matrix3d R_ENU2FLU;
-        R_ENU2FLU << 0,  1,  0,
-                    -1,  0,  0,
-                     0,  0,  1;
-        Eigen::Vector3d tmp_FLU = R_ENU2FLU * P_r_B_ROS.head<3>();
-        P_r_B << tmp_FLU, 1.0;
-
-        Eigen::Vector4d P_r_I(4);
-        P_r_I = H_lpp*P_r_B;
-
-        // This computes P_r_I2 which is the computed location of the Apriltag in the local inertial mavros lpp frame
-        Eigen::Vector4d P_r_I2(4);
-        Eigen::Matrix4d H_lpp_nopos;
-        H_lpp_nopos = H_lpp;
-        H_lpp_nopos(0,3) = 0;
-        H_lpp_nopos(1,3) = 0;
-        H_lpp_nopos(2,3) = 0;
-        P_r_I2 = H_lpp_nopos*H_M_B.inverse()*r4vec;
-
-        // This computes the difference between the inertial location of the apriltag and inertial location of the vehicle
-        Eigen::Vector4d I_diff;
-        I_diff = P_r_I2-P_r_I;
-
-        // This computes the Euler angles associated with the mavros/local_position/pose quaternion in yaw->pitch->roll format.
-        Eigen::Vector3d euler_ang = quat_lpp.toRotationMatrix().eulerAngles(2,1,0);
-
-        // This creates a rotation matrix considering ONLY the heading (not roll/pitch) so we can rotate between body and inertial heading
-        // I'm mentally thinking of this as body referenced, but "stabilized" by removing roll and pitch 
-        Eigen::Matrix3d rotation_matrix;
-        rotation_matrix << cos(euler_ang(0)), -sin(euler_ang(0)), 0, sin(euler_ang(0)),  cos(euler_ang(0)), 0, 0, 0, 1;
-
-
-        // populate and publish the apriltag in body FLU coordinates
-        geometry_msgs::PoseStamped body_pub_data;
-        body_pub_data.header.stamp = lpp_data.header.stamp;
-        body_pub_data.pose.position.x = P_r_B(0);
-        body_pub_data.pose.position.y = P_r_B(1);
-        body_pub_data.pose.position.z = P_r_B(2);
-        target_body_pub.publish(body_pub_data);
-
-        // populate and publish the apriltag in inertial coordinates
-        geometry_msgs::PoseStamped lpp_pub_data;
-        lpp_pub_data.header.stamp = lpp_data.header.stamp;
-        lpp_pub_data.pose.position.x = P_r_I(0) - 0.42;
-        lpp_pub_data.pose.position.y = P_r_I(1) - 0.12;
-        lpp_pub_data.pose.position.z = P_r_I(2) + 0.7471095;
-        target_lpp_pub.publish(lpp_pub_data);
-
-
-        Eigen::Vector4d r_DP_I(4);
-        
-        r_DP_I << 0.0, -0.5, 0.0, 1.0;
-        
-        if (all_in) {
-            // all_in is set to true, if, during this iteration of the while loop, we have obtained both a tag_detection measurement and a mavros/local_position/pose measurement
-            // - if we don't get tag_detection or mavros data, then don't update the control input, and just repeat the control input requested at the previous time-step
-
-            // P_r_I is the position of the april tag in the inertial frame (i.e. r_PO_I)
-            u = control_algorithm(r_DP_I, P_r_I);
-        } else {
-            // if we reach this, then either we are just starting up, or we haven't seen the april tag in 3 or more seconds (so at least 5 seconds)
-            ROS_INFO_STREAM("Haven't seen april tag at least 3 seconds");
-        }
-        
-        // ros::spinOnce();
-        rate.sleep();
+        // 设置平移向量 (单位：米)
+        T_body_camera_.translation() << 0.00, -0.000, -0.00;
     }
 
+    void dronePoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        current_drone_pose_ = *msg;
+        has_drone_pose_ = true;
+    }
+
+    void aprilTagCallback(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg) {
+        if (msg->detections.empty()) {
+            ROS_WARN_THROTTLE(1, "No AprilTag detected");
+            return;
+        }
+
+        // 使用第一个检测到的标签
+        const auto& detection = msg->detections[0];
+        const auto& tag_in_camera = detection.pose.pose.pose.position;
+
+        try {
+
+            // 将Apriltag的位置从相机坐标系转换到机体坐标系
+            Eigen::Vector3d tag_in_body = cameraToBody(tag_in_camera);
+
+
+            // 发布apriltag相对于body_link的位置
+            publishBodyPose(tag_in_body, msg->header.stamp);
+
+            if (!has_drone_pose_) {
+                ROS_WARN_THROTTLE(1, "Waiting for drone pose...");
+                return;
+            }
+
+            // 将Apriltag的位置从机体坐标系转换到惯性坐标系
+            Eigen::Vector3d body_in_inertial = bodyToInertial(tag_in_body);
+
+            // 发布apriltag相对于map的位置
+            publishInertialPose(body_in_inertial, msg->header.stamp);
+        } catch (const std::exception& e) {
+            ROS_ERROR("Transform error: %s", e.what());
+        }
+    }
+
+    Eigen::Vector3d cameraToBody(const geometry_msgs::Point& point) {
+        // 将点从相机坐标系转换到机体坐标系
+        Eigen::Vector3d p_camera(point.x, point.y, point.z);
+        Eigen::Vector3d p_body = T_body_camera_ * p_camera;
+        return p_body;
+    }
+
+    Eigen::Vector3d bodyToInertial(const Eigen::Vector3d& point) {
+        // 构造无人机当前位姿的变换矩阵
+        Eigen::Isometry3d T_inertial_body = Eigen::Isometry3d::Identity();
+        
+        // 设置旋转
+        Eigen::Quaterniond q(
+            current_drone_pose_.pose.orientation.w,
+            current_drone_pose_.pose.orientation.x,
+            current_drone_pose_.pose.orientation.y,
+            current_drone_pose_.pose.orientation.z
+        );
+        T_inertial_body.linear() = q.toRotationMatrix();
+
+        // 设置平移
+        T_inertial_body.translation() << 
+            current_drone_pose_.pose.position.x,
+            current_drone_pose_.pose.position.y,
+            current_drone_pose_.pose.position.z;
+
+        // 执行坐标变换
+        return T_inertial_body * point;
+    }
+
+    void publishBodyPose(const Eigen::Vector3d& position, const ros::Time& stamp) {
+        geometry_msgs::PoseStamped msg;
+        msg.header.stamp = stamp;
+        msg.header.frame_id = "body_link";  // 机体坐标系
+        msg.pose.position.x = position.x();
+        msg.pose.position.y = position.y();
+        msg.pose.position.z = position.z();
+        body_pose_pub_.publish(msg);
+    }
+
+    void publishInertialPose(const Eigen::Vector3d& position, const ros::Time& stamp) {
+        geometry_msgs::PoseStamped msg;
+        msg.header.stamp = stamp;
+        msg.header.frame_id = "map";  // 惯性坐标系
+        msg.pose.position.x = position.x();
+        msg.pose.position.y = position.y();
+        msg.pose.position.z = position.z();
+        inertial_pose_pub_.publish(msg);
+    }
+};
+
+int main(int argc, char** argv) {
+    ros::init(argc, argv, "apriltag_coordinate_transform");
+    AprilTagTransformer transformer;
+    ros::spin();
     return 0;
 }
-
-
