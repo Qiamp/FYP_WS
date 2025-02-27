@@ -1,3 +1,9 @@
 <launch>
-    <node name="offboard_landing" pkg="offboard_landing" type="offboard_landing" output="screen"/>
+    <!-- Offboard Landing控制节点 -->
+    <node pkg="offboard_landing" type="offboard_landing_node" name="offboard_landing" output="screen">
+        <param name="takeoff_height" type="double" value="1.5" />
+        <param name="position_tolerance" type="double" value="0.3" />
+        <param name="stability_threshold" type="double" value="0.1" />
+        <param name="landing_alt_thresh" type="double" value="0.15" />
+    </node>
 </launch>
