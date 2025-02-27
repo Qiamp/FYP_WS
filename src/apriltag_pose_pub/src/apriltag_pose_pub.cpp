@@ -34,7 +34,7 @@ struct AprilTagTransformer {
                     -0.99769073,  0.0270596,  -0.06229757,
                      0.0642064,   0.07658907, -0.99499329;
         T_body_camera_.linear() = rotation;
-        T_body_camera_.translation() << 0.00, -0.000, -0.00;
+        T_body_camera_.translation() << 0.23, 0.15, -0.07;
     }
 
     void dronePoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -43,7 +43,12 @@ struct AprilTagTransformer {
     }
 
     void aprilTagCallback(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg) {
-        if (msg->detections.empty()) return;
+        if (msg->detections.empty()) {
+            ROS_WARN_THROTTLE(1, "[AprilTag] No tags detected!");  // 未检测到标签时的警告
+            return;
+        }
+
+        ROS_INFO_THROTTLE(1, "[AprilTag] Detected %zu tags", msg->detections.size());  // 检测到的标签
 
         const auto& detection = msg->detections[0];
         const auto& tag_pose_camera = detection.pose.pose.pose;
