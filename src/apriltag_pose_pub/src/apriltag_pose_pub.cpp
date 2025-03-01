@@ -34,7 +34,7 @@ struct AprilTagTransformer {
                     -0.99769073,  0.0270596,  -0.06229757,
                      0.0642064,   0.07658907, -0.99499329;
         T_body_camera_.linear() = rotation;
-        T_body_camera_.translation() << 0.23, 0.15, -0.07;
+        T_body_camera_.translation() << 0.00, 0.00, 0.00;
     }
 
     void dronePoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -68,6 +68,10 @@ struct AprilTagTransformer {
 
             // 相机到机体的完整变换
             Eigen::Isometry3d pose_body = T_body_camera_ * pose_camera;
+            // 手动填充pose_body的平移为直接获取的三维坐标
+            pose_body.translation() <<  -tag_pose_camera.position.y + 0.23, //Body X轴
+                                        -tag_pose_camera.position.x, //Body Y轴
+                                        -tag_pose_camera.position.z - 0.08; //Body Z轴
 
             // 发布机体坐标系下的完整姿态
             publishBodyPose(pose_body, msg->header.stamp);
