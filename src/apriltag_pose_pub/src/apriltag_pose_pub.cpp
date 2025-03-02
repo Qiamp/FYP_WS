@@ -138,7 +138,7 @@ struct AprilTagTransformer {
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "apriltag_coordinate_transform");
+    ros::init(argc, argv, "apriltag_pose_pub");
     AprilTagTransformer transformer;
     ros::spin();
     return 0;

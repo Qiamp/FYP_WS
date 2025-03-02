@@ -130,7 +130,7 @@ private:
         double dx = current_uav_pose_.pose.position.x - target.pose.position.x;
         double dy = current_uav_pose_.pose.position.y - target.pose.position.y;
         double dz = current_uav_pose_.pose.position.z - target.pose.position.z;
-        return sqrt(dx*dx + dy*dy + dz*dz) < 0.15;  // 30cm容差
+        return sqrt(dx*dx + dy*dy + dz*dz) < 0.15;  // 容差
     }
 
     bool isTagPositionStable() {
@@ -162,7 +162,7 @@ private:
         case WAIT_FCU:
             if(current_state_.connected && uav_pose_received_) {
                 phase_ = ARM_DRONE;
-                ROS_INFO("[1/4] Systems ready");
+                ROS_INFO("[1/6] Systems ready");
             }
             break;
 
@@ -171,7 +171,7 @@ private:
             if(setMode("OFFBOARD") && armDrone(true)) {
                 phase_ = TAKEOFF;
                 state_start_time_ = ros::Time::now();
-                ROS_INFO("[2/4] Armed & Offboard");
+                ROS_INFO("[2/6] Armed & Offboard");
             }
             break;
 
@@ -180,7 +180,7 @@ private:
             ros::Duration(3.0).sleep();
             if(checkPositionReached(hover_target_)) {
                 phase_ = MOVE_TO_POINT;
-                ROS_INFO("[3/4] Reached hover position");
+                ROS_INFO("[3/6] Reached hover position");
             }
             break;
 
@@ -191,15 +191,15 @@ private:
             if(checkPositionReached(target_)) {
                 phase_ = DETECT_TAG;
                 state_start_time_ = ros::Time::now();
-                ROS_INFO("[4/4] Reached approximate position, detecting tag...");
+                ROS_INFO("[4/6] Reached approximate position, detecting tag...");
             }
             break;
 
         case DETECT_TAG:
-            // pose_pub_.publish(target_);  // 保持当前位置
+            pose_pub_.publish(target_);  // 保持当前位置
             if(isTagPositionStable() && has_tag_position_) {
                 phase_ = MOVE_TO_TAG;
-                ROS_INFO("Tag position stabilized. Moving to tag position...");
+                ROS_INFO("[5/6] Tag position stabilized. Moving to tag position...");
             }
             // 超时处理（30秒）
             else if((ros::Time::now() - state_start_time_).toSec() > 30.0) {
@@ -213,14 +213,11 @@ private:
         case MOVE_TO_TAG:
             if(has_tag_position_) {
                 pose_pub_.publish(tag_target_);
-                ROS_INFO("Moving to tag position...");
+                ROS_INFO("[6/6] Moving to tag position...");
                 if(checkPositionReached(tag_target_)) {
-                    ROS_INFO("Reached tag position. Landing...");
                     if(setMode("POSCTL")) {
                         ros::Duration(3.0).sleep();
-                        if(setMode("AUTO.LAND")) {
-                            phase_ = LAND_DRONE;
-                        }
+                        phase_ = LAND_DRONE;
                     }
                 }
             } else {
@@ -229,10 +226,10 @@ private:
             break;
 
         case LAND_DRONE:
+            ROS_WARN("Reached tag position. Landing...");
+            setMode("AUTO.LAND")
             if(ext_state_.landed_state == mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND) {
                 armDrone(false);
-                setMode("POSCTL"); 
-                ros::Duration(3.0).sleep();
                 ROS_INFO("Mission Complete");
                 ros::shutdown();
             }
