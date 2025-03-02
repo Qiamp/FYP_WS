@@ -227,7 +227,7 @@ private:
 
         case LAND_DRONE:
             ROS_WARN("Reached tag position. Landing...");
-            setMode("AUTO.LAND")
+            setMode("AUTO.LAND");
             if(ext_state_.landed_state == mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND) {
                 armDrone(false);
                 ROS_INFO("Mission Complete");
