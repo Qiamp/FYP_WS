@@ -41,9 +41,9 @@ public:
         mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
         // 设置目标点（基于视觉坐标系）
-        target_.pose.position.x = 2.0;  // X方向偏移（米）
-        target_.pose.position.y = 1.0;  // Y方向偏移
-        target_.pose.position.z = 1.0;  // 飞行高度
+        target_.pose.position.x = 2.0;  // X方向
+        target_.pose.position.y = 1.0;  // Y方向
+        target_.pose.position.z = 2.0;  // 飞行高度
 
         // 初始悬停点（视觉坐标系原点）
         hover_target_.pose.position.x = 0.0;
@@ -113,7 +113,7 @@ private:
         
         // 更新最新tag位置（带高度偏移）
         tag_target_ = *msg;
-        tag_target_.pose.position.z += 0.5; // 0.5米高度偏移
+        tag_target_.pose.position.z += 1.0; // 高度偏移
         has_tag_position_ = true;
     }
 
@@ -193,7 +193,7 @@ private:
             }
             break;
 
-                case DETECT_TAG:
+        case DETECT_TAG:
             pose_pub_.publish(target_);  // 保持当前位置
             if(isTagPositionStable() && has_tag_position_) {
                 phase_ = MOVE_TO_TAG;
