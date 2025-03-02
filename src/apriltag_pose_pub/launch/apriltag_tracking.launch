@@ -1,4 +1,6 @@
 <?xml version="1.0"?>
 <launch>
     <node name="apriltag_pose_pub" pkg="apriltag_pose_pub" type="apriltag_pose_pub" output="screen"/>
+    <param name="filter_alpha" value="0.2" />
+    <param name="max_time_gap" value="1.5" />
 </launch>
