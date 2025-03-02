@@ -41,7 +41,7 @@ public:
         mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
         // 设置目标点（基于视觉坐标系）
-        target_.pose.position.x = 2.0;  // X方向
+        target_.pose.position.x = 1.5;  // X方向
         target_.pose.position.y = 1.0;  // Y方向
         target_.pose.position.z = 2.0;  // 飞行高度
 
@@ -89,8 +89,8 @@ private:
     // AprilTag相关参数
     std::deque<geometry_msgs::Point> tag_position_history_;
     std::mutex tag_pose_mutex_;
-    const size_t STABLE_SAMPLES = 10;    // 稳定检测所需样本数
-    const double STABLE_THRESHOLD = 0.1; // 位置稳定性阈值（米）
+    const size_t STABLE_SAMPLES = 50;    // 稳定检测所需样本数
+    const double STABLE_THRESHOLD = 0.06; // 位置稳定性阈值（米）
     bool has_tag_position_ = false;
 
     // ROS通信对象
@@ -113,7 +113,7 @@ private:
         
         // 更新最新tag位置（带高度偏移）
         tag_target_ = *msg;
-        tag_target_.pose.position.z += 1.0; // 高度偏移
+        tag_target_.pose.position.z = current_uav_pose_.pose.position.z; // 高度偏移
         has_tag_position_ = true;
     }
 
@@ -130,7 +130,7 @@ private:
         double dx = current_uav_pose_.pose.position.x - target.pose.position.x;
         double dy = current_uav_pose_.pose.position.y - target.pose.position.y;
         double dz = current_uav_pose_.pose.position.z - target.pose.position.z;
-        return sqrt(dx*dx + dy*dy + dz*dz) < 0.2;  // 30cm容差
+        return sqrt(dx*dx + dy*dy + dz*dz) < 0.15;  // 30cm容差
     }
 
     bool isTagPositionStable() {
@@ -177,6 +177,7 @@ private:
 
         case TAKEOFF:
             pose_pub_.publish(hover_target_);
+            ros::Duration(3.0).sleep();
             if(checkPositionReached(hover_target_)) {
                 phase_ = MOVE_TO_POINT;
                 ROS_INFO("[3/4] Reached hover position");
@@ -186,6 +187,7 @@ private:
 
         case MOVE_TO_POINT:
             pose_pub_.publish(target_);
+            ros::Duration(5.0).sleep();
             if(checkPositionReached(target_)) {
                 phase_ = DETECT_TAG;
                 state_start_time_ = ros::Time::now();
@@ -194,7 +196,7 @@ private:
             break;
 
         case DETECT_TAG:
-            pose_pub_.publish(target_);  // 保持当前位置
+            // pose_pub_.publish(target_);  // 保持当前位置
             if(isTagPositionStable() && has_tag_position_) {
                 phase_ = MOVE_TO_TAG;
                 ROS_INFO("Tag position stabilized. Moving to tag position...");
@@ -211,7 +213,9 @@ private:
         case MOVE_TO_TAG:
             if(has_tag_position_) {
                 pose_pub_.publish(tag_target_);
+                ROS_INFO("Moving to tag position...");
                 if(checkPositionReached(tag_target_)) {
+                    ROS_INFO("Reached tag position. Landing...");
                     if(setMode("POSCTL")) {
                         ros::Duration(3.0).sleep();
                         if(setMode("AUTO.LAND")) {
