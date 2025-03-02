@@ -5,7 +5,7 @@
 #include <memory>
 
 struct AprilTagTransformer {
-    AprilTagTransformer() : nh_("~") {
+    AprilTagTransformer() : nh_("~"), is_filter_initialized_(false), last_detection_time_(0) {
         drone_pose_sub_ = nh_.subscribe("/mavros/vision_pose/pose", 10, 
             &AprilTagTransformer::dronePoseCallback, this);
         april_tag_sub_ = nh_.subscribe("/tag_detections", 10,
@@ -13,6 +13,10 @@ struct AprilTagTransformer {
         
         body_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
         inertial_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
+
+        // 加载滤波参数
+        nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
+        nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
 
         initTransforms();
     }
@@ -24,7 +28,12 @@ struct AprilTagTransformer {
     geometry_msgs::PoseStamped current_drone_pose_;
     bool has_drone_pose_ = false;
     
-    Eigen::Isometry3d T_body_camera_;  // 相机到机体的变换
+    Eigen::Isometry3d T_body_camera_;
+    Eigen::Vector3d filtered_position_;  // 滤波后的位置
+    bool is_filter_initialized_;         // 滤波器初始化标志
+    double filter_alpha_;                // EMA滤波系数
+    double max_time_gap_;                // 最大允许时间间隔
+    ros::Time last_detection_time_;      // 上次检测时间戳
 
     void initTransforms() {
         T_body_camera_ = Eigen::Isometry3d::Identity();
@@ -92,10 +101,38 @@ struct AprilTagTransformer {
 
             Eigen::Isometry3d pose_inertial = T_inertial_body * pose_body;
 
+            // 应用位置滤波器
+            applyPositionFilter(pose_inertial, msg->header.stamp);
             publishInertialPose(pose_inertial, msg->header.stamp);
         } catch (const std::exception& e) {
             ROS_ERROR("Transform error: %s", e.what());
         }
+    }
+
+    void applyPositionFilter(Eigen::Isometry3d& pose, const ros::Time& stamp) {
+        Eigen::Vector3d current_pos = pose.translation();
+        
+        // 检查时间间隔决定是否重置滤波器
+        if (is_filter_initialized_) {
+            double dt = (stamp - last_detection_time_).toSec();
+            if (dt > max_time_gap_) {
+                ROS_WARN("[AprilTag] Detected %.1f seconds interval, resetting filter", dt); // 警告，有时间间隔，重置滤波器
+                is_filter_initialized_ = false;
+            }
+        }
+
+        // 更新滤波器
+        if (!is_filter_initialized_) {
+            filtered_position_ = current_pos;
+            is_filter_initialized_ = true;
+            ROS_INFO("[AprilTag] Position filter initialized"); // 信息，滤波器已初始化
+        } else {
+            filtered_position_ = filter_alpha_ * current_pos 
+                               + (1.0 - filter_alpha_) * filtered_position_;
+        }
+
+        pose.translation() = filtered_position_;
+        last_detection_time_ = stamp;
     }
 
     void publishBodyPose(const Eigen::Isometry3d& pose, const ros::Time& stamp) {
