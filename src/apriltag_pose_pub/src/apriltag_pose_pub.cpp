@@ -2,6 +2,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <Eigen/Geometry>
+#include <deque>
 #include <memory>
 
 struct AprilTagTransformer {
@@ -17,6 +18,8 @@ struct AprilTagTransformer {
         // 加载滤波参数
         nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
         nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
+        nh_.param("buffer_size", buffer_size_, 30);
+        nh_.param("position_threshold", position_threshold_, 0.15);
 
         initTransforms();
     }
@@ -34,6 +37,10 @@ struct AprilTagTransformer {
     double filter_alpha_;                // EMA滤波系数
     double max_time_gap_;                // 最大允许时间间隔
     ros::Time last_detection_time_;      // 上次检测时间戳
+
+    std::deque<Eigen::Vector3d> position_buffer_;  // 位置数据缓冲区
+    int buffer_size_;               // 要求连续检测次数
+    double position_threshold_;     // 位置波动阈值
 
     void initTransforms() {
         T_body_camera_ = Eigen::Isometry3d::Identity();
@@ -103,7 +110,15 @@ struct AprilTagTransformer {
 
             // 应用位置滤波器
             applyPositionFilter(pose_inertial, msg->header.stamp);
-            publishInertialPose(pose_inertial, msg->header.stamp);
+
+            // 更新缓冲区
+            updatePositionBuffer(pose_inertial.translation());
+
+            // 条件检查并发布
+            if (checkPublishConditions()) {
+                publishInertialPose(pose_inertial, msg->header.stamp);
+            }
+
         } catch (const std::exception& e) {
             ROS_ERROR("Transform error: %s", e.what());
         }
@@ -117,6 +132,7 @@ struct AprilTagTransformer {
             double dt = (stamp - last_detection_time_).toSec();
             if (dt > max_time_gap_) {
                 ROS_WARN("[AprilTag] Detected %.1f seconds interval, resetting filter", dt); // 警告，有时间间隔，重置滤波器
+                position_buffer_.clear();
                 is_filter_initialized_ = false;
             }
         }
@@ -133,6 +149,51 @@ struct AprilTagTransformer {
 
         pose.translation() = filtered_position_;
         last_detection_time_ = stamp;
+    }
+
+    void updatePositionBuffer(const Eigen::Vector3d& position) {
+        position_buffer_.push_back(position);
+        // 保持缓冲区大小
+        while (position_buffer_.size() > buffer_size_) {
+            position_buffer_.pop_front();
+        }
+    }
+
+    bool checkPublishConditions() {
+        if (position_buffer_.size() < buffer_size_) {
+            ROS_INFO_THROTTLE(5, "数据采集中... (%zu/%d)", 
+                            position_buffer_.size(), buffer_size_);
+            return false;
+        }
+
+        // 计算各轴波动范围
+        Eigen::Vector3d min_val = position_buffer_.front();
+        Eigen::Vector3d max_val = position_buffer_.front();
+        
+        for (const auto& pos : position_buffer_) {
+            min_val.x() = std::min(min_val.x(), pos.x());
+            min_val.y() = std::min(min_val.y(), pos.y());
+            min_val.z() = std::min(min_val.z(), pos.z());
+            
+            max_val.x() = std::max(max_val.x(), pos.x());
+            max_val.y() = std::max(max_val.y(), pos.y());
+            max_val.z() = std::max(max_val.z(), pos.z());
+        }
+
+        const Eigen::Vector3d ranges = max_val - min_val;
+        
+        if (ranges.x() < position_threshold_ &&
+            ranges.y() < position_threshold_ &&
+            ranges.z() < position_threshold_) 
+        {
+            ROS_INFO_THROTTLE(2, "定位就绪 (精度: X±%.3fm Y±%.3fm Z±%.3fm)", 
+                             ranges.x()/2, ranges.y()/2, ranges.z()/2);
+            return true;
+        }
+
+        ROS_WARN_THROTTLE(1, "波动超标 (X:%.3fm Y:%.3fm Z:%.3fm)", 
+                         ranges.x(), ranges.y(), ranges.z());
+        return false;
     }
 
     void publishBodyPose(const Eigen::Isometry3d& pose, const ros::Time& stamp) {
