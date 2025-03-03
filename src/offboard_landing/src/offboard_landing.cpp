@@ -89,8 +89,8 @@ private:
     // AprilTag相关参数
     std::deque<geometry_msgs::Point> tag_position_history_;
     std::mutex tag_pose_mutex_;
-    const size_t STABLE_SAMPLES = 50;    // 稳定检测所需样本数
-    const double STABLE_THRESHOLD = 0.06; // 位置稳定性阈值（米）
+    const size_t STABLE_SAMPLES = 30;    // 稳定检测所需样本数
+    const double STABLE_THRESHOLD = 0.10; // 位置稳定性阈值（米）
     bool has_tag_position_ = false;
 
     // ROS通信对象
@@ -130,7 +130,7 @@ private:
         double dx = current_uav_pose_.pose.position.x - target.pose.position.x;
         double dy = current_uav_pose_.pose.position.y - target.pose.position.y;
         double dz = current_uav_pose_.pose.position.z - target.pose.position.z;
-        return sqrt(dx*dx + dy*dy + dz*dz) < 0.15;  // 容差
+        return sqrt(dx*dx + dy*dy + dz*dz) < 0.05;  // 容差
     }
 
     bool isTagPositionStable() {

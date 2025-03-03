@@ -18,8 +18,8 @@ struct AprilTagTransformer {
         // 加载滤波参数
         nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
         nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
-        nh_.param("buffer_size", buffer_size_, 30);
-        nh_.param("position_threshold", position_threshold_, 0.15);
+        nh_.param("buffer_size", buffer_size_, 15); // 缓冲区大小
+        nh_.param("position_threshold", position_threshold_, 0.05); // 位置波动阈值
 
         initTransforms();
     }
