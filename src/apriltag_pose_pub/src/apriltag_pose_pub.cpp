@@ -171,13 +171,8 @@ struct AprilTagTransformer {
         Eigen::Vector3d max_val = position_buffer_.front();
         
         for (const auto& pos : position_buffer_) {
-            min_val.x() = std::min(min_val.x(), pos.x());
-            min_val.y() = std::min(min_val.y(), pos.y());
-            min_val.z() = std::min(min_val.z(), pos.z());
-            
-            max_val.x() = std::max(max_val.x(), pos.x());
-            max_val.y() = std::max(max_val.y(), pos.y());
-            max_val.z() = std::max(max_val.z(), pos.z());
+            min_val = min_val.cwiseMin(pos);
+            max_val = max_val.cwiseMax(pos);
         }
 
         const Eigen::Vector3d ranges = max_val - min_val;
@@ -186,12 +181,12 @@ struct AprilTagTransformer {
             ranges.y() < position_threshold_ &&
             ranges.z() < position_threshold_) 
         {
-            ROS_INFO_THROTTLE(2, "定位就绪 (精度: X±%.3fm Y±%.3fm Z±%.3fm)", 
+            ROS_INFO_THROTTLE(2, "Position stable | X±%.3fm Y±%.3fm Z±%.3fm", 
                              ranges.x()/2, ranges.y()/2, ranges.z()/2);
             return true;
         }
 
-        ROS_WARN_THROTTLE(1, "波动超标 (X:%.3fm Y:%.3fm Z:%.3fm)", 
+        ROS_WARN_THROTTLE(1, "Position noisy | X:%.3fm Y:%.3fm Z:%.3fm", 
                          ranges.x(), ranges.y(), ranges.z());
         return false;
     }
@@ -208,6 +203,7 @@ struct AprilTagTransformer {
         
         // 方向
         Eigen::Quaterniond q(pose.linear());
+        q.normalize();
         msg.pose.orientation.w = q.w();
         msg.pose.orientation.x = q.x();
         msg.pose.orientation.y = q.y();
@@ -226,6 +222,7 @@ struct AprilTagTransformer {
         msg.pose.position.z = pose.translation().z();
         
         Eigen::Quaterniond q(pose.linear());
+        q.normalize();
         msg.pose.orientation.w = q.w();
         msg.pose.orientation.x = q.x();
         msg.pose.orientation.y = q.y();
