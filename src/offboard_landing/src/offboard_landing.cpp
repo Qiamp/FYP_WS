@@ -177,7 +177,6 @@ private:
 
         case TAKEOFF:
             pose_pub_.publish(hover_target_);
-            ros::Duration(3.0).sleep();
             if(checkPositionReached(hover_target_)) {
                 phase_ = MOVE_TO_POINT;
                 ROS_INFO("[3/6] Reached hover position");
@@ -187,7 +186,6 @@ private:
 
         case MOVE_TO_POINT:
             pose_pub_.publish(target_);
-            ros::Duration(5.0).sleep();
             if(checkPositionReached(target_)) {
                 phase_ = DETECT_TAG;
                 state_start_time_ = ros::Time::now();
