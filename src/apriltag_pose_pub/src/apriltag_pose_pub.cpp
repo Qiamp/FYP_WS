@@ -18,7 +18,7 @@ struct AprilTagTransformer {
         // 加载滤波参数
         nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
         nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
-        nh_.param("buffer_size", buffer_size_, 15); // 缓冲区大小
+        nh_.param("buffer_size", buffer_size_, 30); // 缓冲区大小
         nh_.param("position_threshold", position_threshold_, 0.05); // 位置波动阈值
 
         initTransforms();
@@ -86,7 +86,7 @@ struct AprilTagTransformer {
             Eigen::Isometry3d pose_body = T_body_camera_ * pose_camera;
             // 手动填充pose_body的平移为直接获取的三维坐标
             pose_body.translation() <<  -tag_pose_camera.position.y + 0.23, //Body X轴
-                                        -tag_pose_camera.position.x, //Body Y轴
+                                        -tag_pose_camera.position.x + 0.06, //Body Y轴
                                         -tag_pose_camera.position.z - 0.08; //Body Z轴
 
             // 发布机体坐标系下的完整姿态
@@ -161,7 +161,7 @@ struct AprilTagTransformer {
 
     bool checkPublishConditions() {
         if (position_buffer_.size() < buffer_size_) {
-            ROS_INFO_THROTTLE(5, "数据采集中... (%zu/%d)", 
+            ROS_INFO_THROTTLE(5, "Data collection in progress (%zu/%d)", 
                             position_buffer_.size(), buffer_size_);
             return false;
         }

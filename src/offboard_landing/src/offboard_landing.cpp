@@ -43,12 +43,12 @@ public:
         // 设置目标点（基于视觉坐标系）
         target_.pose.position.x = 1.5;  // X方向
         target_.pose.position.y = 1.0;  // Y方向
-        target_.pose.position.z = 2.0;  // 飞行高度
+        target_.pose.position.z = 1.5;  // 飞行高度
 
         // 初始悬停点（视觉坐标系原点）
         hover_target_.pose.position.x = 0.0;
         hover_target_.pose.position.y = 0.0;
-        hover_target_.pose.position.z = 1.0;
+        hover_target_.pose.position.z = 1.5;
     }
 
     void run() {
@@ -90,7 +90,7 @@ private:
     std::deque<geometry_msgs::Point> tag_position_history_;
     std::mutex tag_pose_mutex_;
     const size_t STABLE_SAMPLES = 30;    // 稳定检测所需样本数
-    const double STABLE_THRESHOLD = 0.10; // 位置稳定性阈值（米）
+    const double STABLE_THRESHOLD = 0.02; // 位置稳定性阈值（米）
     bool has_tag_position_ = false;
 
     // ROS通信对象
@@ -125,12 +125,11 @@ private:
         ext_state_ = *msg;
     }
 
-    bool checkPositionReached(const geometry_msgs::PoseStamped& target) {
-        // 基于视觉定位的位置检查
+    bool checkPositionReached(const geometry_msgs::PoseStamped& target, double tolerance) {
         double dx = current_uav_pose_.pose.position.x - target.pose.position.x;
         double dy = current_uav_pose_.pose.position.y - target.pose.position.y;
         double dz = current_uav_pose_.pose.position.z - target.pose.position.z;
-        return sqrt(dx*dx + dy*dy + dz*dz) < 0.05;  // 容差
+        return sqrt(dx*dx + dy*dy + dz*dz) < tolerance;  // 使用传入的容差值
     }
 
     bool isTagPositionStable() {
@@ -177,7 +176,7 @@ private:
 
         case TAKEOFF:
             pose_pub_.publish(hover_target_);
-            if(checkPositionReached(hover_target_)) {
+            if(checkPositionReached(hover_target_, 0.1)) {
                 phase_ = MOVE_TO_POINT;
                 ROS_INFO("[3/6] Reached hover position");
             }
@@ -186,7 +185,7 @@ private:
 
         case MOVE_TO_POINT:
             pose_pub_.publish(target_);
-            if(checkPositionReached(target_)) {
+            if(checkPositionReached(target_, 0.08)) {
                 phase_ = DETECT_TAG;
                 state_start_time_ = ros::Time::now();
                 ROS_INFO("[4/6] Reached approximate position, detecting tag...");
@@ -194,7 +193,7 @@ private:
             break;
 
         case DETECT_TAG:
-            pose_pub_.publish(target_);  // 保持当前位置
+            // pose_pub_.publish(target_);  // 保持当前位置
             if(isTagPositionStable() && has_tag_position_) {
                 phase_ = MOVE_TO_TAG;
                 ROS_INFO("[5/6] Tag position stabilized. Moving to tag position...");
@@ -209,10 +208,11 @@ private:
 
         
         case MOVE_TO_TAG:
+            // pose_pub_.publish(tag_target_);  //For testing
             if(has_tag_position_) {
                 pose_pub_.publish(tag_target_);
                 ROS_INFO("[6/6] Moving to tag position...");
-                if(checkPositionReached(tag_target_)) {
+                if(checkPositionReached(tag_target_, 0.05)) {
                     if(setMode("POSCTL")) {
                         ros::Duration(3.0).sleep();
                         phase_ = LAND_DRONE;
