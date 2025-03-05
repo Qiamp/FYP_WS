@@ -71,6 +71,6 @@
     <param name="rtcm_timeout_seconds" value="4" />
 
     <!-- Uncomment the following section and replace "/gx5/nmea/sentence" with the topic you are sending NMEA on if it is not the one we requested -->
-    <!--<remap from="/ntrip_client/nmea" to="/gx5/nmea/sentence" />-->
+    <remap from="/rtcm" to="/mavros/gps_rtk/send_rtcm" />
   </node>
 </launch>
