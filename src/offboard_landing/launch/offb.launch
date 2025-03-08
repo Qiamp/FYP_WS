@@ -1,5 +1,0 @@
-<launch>
-    <!-- Offboard Landing控制节点 -->
-    <node pkg="offboard_landing" type="offboard_landing_node" name="offboard_landing" output="screen">
-    </node>
-</launch>
