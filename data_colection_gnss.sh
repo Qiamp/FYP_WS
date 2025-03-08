@@ -7,7 +7,7 @@ roslaunch ntrip_client ntrip_client.launch& sleep 6;
 
 echo "========== 2. Starting mavros =========="
 sudo chmod 777 /dev/tty*
-roslaunch mavros px4.launch & sleep 5;
+roslaunch mavros test.launch & sleep 5;
 # rosrun mavros mavcmd long 511 31 10000 0 0 0 0 0
 
 # echo "========== 3. Starting USB_CAM =========="
