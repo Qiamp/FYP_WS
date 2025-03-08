@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Offboard Landing GNSS Node -->
+    <node pkg="offboard_landing_gnss" type="offboard_landing_gnss" name="offboard_landing_gnss_node" output="screen">
+        <!-- Remap topics if needed -->
+        <!-- <remap from="original_topic" to="new_topic"/> -->
+    </node>
+</launch>
