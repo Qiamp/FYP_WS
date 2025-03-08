@@ -1,11 +1,10 @@
 #include <string> 
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
-#include <move_base_msgs/MoveBaseAction.h>
-#include <actionlib/client/simple_action_client.h>
 #include <std_msgs/Bool.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <mavros_msgs/PositionTarget.h>
@@ -28,7 +27,7 @@ float init_position_x_take_off =0;
 float init_position_y_take_off =0;
 float init_position_z_take_off =0;
 bool  flag_init_position = false;
-geometry_msgs::PoseStamped local_pos;
+geometry_msgs::PoseWithCovarianceStamped local_pos;
 
 void state_cb(const mavros_msgs::State::ConstPtr& msg)
 {
@@ -36,17 +35,17 @@ void state_cb(const mavros_msgs::State::ConstPtr& msg)
 }
 
 //回调函数接收无人机的初始位置信息
-void local_pos_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+void local_pos_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
 {
     local_pos = *msg;
-    if (flag_init_position==false && (local_pos.pose.position.z !=0))
+    if (flag_init_position==false && (local_pos.pose.pose.position.z !=0))
     {
-        init_position_x_take_off = local_pos.pose.position.x;
-        init_position_y_take_off = local_pos.pose.position.y;
-        init_position_z_take_off = local_pos.pose.position.z;
+        init_position_x_take_off = local_pos.pose.pose.position.x;
+        init_position_y_take_off = local_pos.pose.pose.position.y;
+        init_position_z_take_off = local_pos.pose.pose.position.z;
         flag_init_position = true;        
     }
-    tf::quaternionMsgToTF(local_pos.pose.orientation, quat);
+    tf::quaternionMsgToTF(local_pos.pose.pose.orientation, quat);
     tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 }
 
@@ -61,8 +60,8 @@ int main(int argc, char **argv)
 
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
     
-    ros::Subscriber local_pos_sub = nh.subscribe<geometry_msgs::PoseStamped>(
-        "/mavros/local_position/pose", 10, local_pos_cb);
+    ros::Subscriber local_pos_sub = nh.subscribe<geometry_msgs::PoseWithCovarianceStamped>(
+        "/mavros/global_position/local", 10, local_pos_cb);
 
     ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
 
@@ -100,7 +99,6 @@ int main(int argc, char **argv)
 
     ros::Time last_request = ros::Time::now();
 
- 	//此处满足一次请求进入offboard模式即可，官方例成循环切入offboard会导致无人机无法使用遥控器控制 
     while(ros::ok())
     {
         //请求进入OFFBOARD模式
@@ -125,7 +123,7 @@ int main(int argc, char **argv)
             }
         }
         
-        if(fabs(local_pos.pose.position.z - init_position_z_take_off - ALTITUDE) < 0.2) 
+        if(fabs(local_pos.pose.pose.position.z - init_position_z_take_off - ALTITUDE) < 0.2)
         {    
             if(ros::Time::now() - last_request > ros::Duration(3.0))
             {
@@ -141,7 +139,7 @@ int main(int argc, char **argv)
         rate.sleep();
     }   
 
-    
+
     while(ros::ok())
     {
         if((flag == 1) && (ros::Time::now() - last_request > ros::Duration(5.0)))

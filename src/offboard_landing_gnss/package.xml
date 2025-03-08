@@ -13,8 +13,8 @@
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>mavros_msgs</depend>
+  <depend>mavros</depend>
   <depend>tf</depend>
-  <depend>actionlib</depend>
 
   <export>
   </export>

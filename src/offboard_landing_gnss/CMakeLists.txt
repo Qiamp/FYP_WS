@@ -5,8 +5,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   geometry_msgs
   mavros_msgs
+  mavros
   tf
-  actionlib
 )
 
 catkin_package()
