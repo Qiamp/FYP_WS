@@ -4,8 +4,6 @@
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
-#include <move_base_msgs/MoveBaseAction.h>
-#include <actionlib/client/simple_action_client.h>
 #include <std_msgs/Bool.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <mavros_msgs/PositionTarget.h>
@@ -157,7 +155,7 @@ int main(int argc, char **argv)
         if((flag == 2) && (ros::Time::now() - last_request > ros::Duration(8.0)))
         {
             ROS_INFO("Position_2 ");
-            pose.pose.position.x = init_position_x_take_off + 2;
+            pose.pose.position.x = init_position_x_take_off + 1;
             pose.pose.position.y = init_position_y_take_off + 0;
             pose.pose.position.z = init_position_z_take_off + ALTITUDE;     
             last_request = ros::Time::now();
@@ -167,8 +165,8 @@ int main(int argc, char **argv)
         if((flag == 3) && (ros::Time::now() - last_request > ros::Duration(8.0)))
         {
             ROS_INFO("Position_3 ");
-            pose.pose.position.x = init_position_x_take_off + 2;
-            pose.pose.position.y = init_position_y_take_off + 2;
+            pose.pose.position.x = init_position_x_take_off + 1;
+            pose.pose.position.y = init_position_y_take_off + 1;
             pose.pose.position.z = init_position_z_take_off + ALTITUDE;      
             last_request = ros::Time::now();
             flag=4;
@@ -178,7 +176,7 @@ int main(int argc, char **argv)
         {
             ROS_INFO("Position_4 ");
             pose.pose.position.x = init_position_x_take_off + 0;
-            pose.pose.position.y = init_position_y_take_off + 2;
+            pose.pose.position.y = init_position_y_take_off + 1;
             pose.pose.position.z = init_position_z_take_off + ALTITUDE;     
             last_request = ros::Time::now();
             flag=5;

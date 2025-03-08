@@ -6,7 +6,6 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   mavros_msgs
   tf
-  actionlib
 )
 
 catkin_package()
