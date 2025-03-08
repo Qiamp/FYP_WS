@@ -194,10 +194,8 @@ int main(int argc, char **argv)
         
         if((flag == 6) && (ros::Time::now() - last_request > ros::Duration(8.0)))
         {
-            ROS_INFO("AUTO.LAND");
-            pose.pose.position.x = init_position_x_take_off + 0;
-            pose.pose.position.y = init_position_y_take_off + 0;
-            pose.pose.position.z = init_position_z_take_off - 1;    
+            offb_set_mode.request.custom_mode = "AUTO.LAND";
+            ROS_INFO("AUTO.LAND");   
         }
         
         local_pos_pub.publish(pose);
