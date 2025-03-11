@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   mavros_msgs
   mavros
   tf
+  nav_msgs
 )
 
 catkin_package()
