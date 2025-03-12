@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <sensor_msgs/NavSatFix.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
@@ -9,6 +10,8 @@
 #include <mutex>
 #include <Eigen/Core>
 #include <tf/transform_datatypes.h>
+#include <geodesy/utm.h>
+#include <geographic_msgs/GeoPoint.h>
 
 enum FlightPhase {
     WAIT_FCU,       // 等待飞控连接
@@ -22,10 +25,13 @@ enum FlightPhase {
 
 class GNSSLanding {
 public:
-    GNSSLanding() : phase_(WAIT_FCU), init_position_received_(false) {
+    GNSSLanding() : phase_(WAIT_FCU), home_set_(false), tag_position_set_(false) {
         // GNSS定位订阅
-        gnss_pose_sub_ = nh_.subscribe<nav_msgs::Odometry>(
-            "/mavros/global_position/local", 10, &GNSSLanding::gnssPoseCb, this);
+        gnss_raw_sub_ = nh_.subscribe<sensor_msgs::NavSatFix>(
+            "/mavros/global_position/raw/fix", 10, &GNSSLanding::gnssRawCb, this);
+        
+        gnss_local_sub_ = nh_.subscribe<nav_msgs::Odometry>(
+            "/mavros/global_position/local", 10, &GNSSLanding::gnssLocalCb, this);
         
         // AprilTag GNSS位置订阅
         tag_pose_sub_ = nh_.subscribe<geometry_msgs::PoseStamped>(
@@ -45,16 +51,21 @@ public:
         arm_client_ = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
         mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
-        // 初始化参数
-        target_height_ = 1.5;  // 初始飞行高度
+        // 加载AprilTag大致坐标参数
+        nh_.param<double>("tag_latitude", tag_lat_, 0.0);
+        nh_.param<double>("tag_longitude", tag_lon_, 0.0);
+        nh_.param<double>("tag_altitude", tag_alt_, 0.0);
+        
+        // 初始化飞行参数
+        target_height_ = 1.5;      // 初始飞行高度
         landing_threshold_ = 0.3;  // 着陆位置容差
     }
 
     void run() {
         ros::Rate rate(20.0);
         
-        // 等待连接和GNSS定位初始化
-        while(ros::ok() && (!current_state_.connected || !init_position_received_)) {
+        // 等待连接和GNSS初始化
+        while(ros::ok() && (!current_state_.connected || !home_set_)) {
             ros::spinOnce();
             rate.sleep();
             ROS_INFO_THROTTLE(1, "Waiting for FCU & GNSS initialization...");
@@ -81,39 +92,52 @@ public:
 private:
     ros::NodeHandle nh_;
     FlightPhase phase_;
-    nav_msgs::Odometry current_gnss_pose_;
-    geometry_msgs::PoseStamped hover_target_, target_pose_, tag_target_;
-    mavros_msgs::State current_state_;
-    mavros_msgs::ExtendedState ext_state_;
     
-    // 初始位置相关
-    bool init_position_received_;
-    double init_lat_, init_lon_, init_alt_;
+    // 定位相关
+    sensor_msgs::NavSatFix home_position_;
+    nav_msgs::Odometry current_local_position_;
+    geometry_msgs::PoseStamped hover_target_, approx_tag_target_, precise_tag_target_;
+    bool home_set_, tag_position_set_;
+    
+    // AprilTag参数
+    double tag_lat_, tag_lon_, tag_alt_;
     float target_height_;
     double landing_threshold_;
 
-    // AprilTag跟踪相关
+    // AprilTag跟踪
     std::deque<geometry_msgs::Point> tag_position_history_;
     std::mutex tag_pose_mutex_;
     const size_t STABLE_SAMPLES = 30;
     const double STABLE_THRESHOLD = 0.1;  // GNSS定位稳定性阈值
 
-    // ROS通信对象
-    ros::Subscriber gnss_pose_sub_, tag_pose_sub_, state_sub_, ext_state_sub_;
+    // ROS通信
+    ros::Subscriber gnss_raw_sub_, gnss_local_sub_, tag_pose_sub_, state_sub_, ext_state_sub_;
     ros::Publisher pose_pub_;
     ros::ServiceClient arm_client_, mode_client_;
+    mavros_msgs::State current_state_;
+    mavros_msgs::ExtendedState ext_state_;
 
-    void gnssPoseCb(const nav_msgs::Odometry::ConstPtr& msg) {
-        if(!init_position_received_) {
-            // 记录初始位置
-            init_lat_ = msg->pose.pose.position.x;
-            init_lon_ = msg->pose.pose.position.y;
-            init_alt_ = msg->pose.pose.position.z;
-            init_position_received_ = true;
+    // GNSS原始定位回调
+    void gnssRawCb(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+        if(!home_set_) {
+            home_position_ = *msg;
+            home_set_ = true;
+            ROS_INFO("Home position set: [%.7f, %.7f, %.2f]", 
+                    home_position_.latitude,
+                    home_position_.longitude,
+                    home_position_.altitude);
+            
+            // 计算AprilTag大致本地坐标
+            ComputeApproxTagPosition();
         }
-        current_gnss_pose_ = *msg;
     }
 
+    // 本地定位回调
+    void gnssLocalCb(const nav_msgs::Odometry::ConstPtr& msg) {
+        current_local_position_ = *msg;
+    }
+
+    // AprilTag定位回调
     void tagPoseCb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
         std::lock_guard<std::mutex> lock(tag_pose_mutex_);
         
@@ -123,29 +147,50 @@ private:
             tag_position_history_.pop_front();
         }
         
-        // 更新目标位置（保持当前高度）
-        tag_target_ = *msg;
-        tag_target_.pose.position.z = current_gnss_pose_.pose.pose.position.z;
+        // 更新精确目标位置
+        precise_tag_target_ = *msg;
+        precise_tag_target_.pose.position.z = current_local_position_.pose.pose.position.z;
+        tag_position_set_ = true;
     }
 
-    void stateCb(const mavros_msgs::State::ConstPtr& msg) {
-        current_state_ = *msg;
+    // 计算AprilTag大致本地坐标
+    void ComputeApproxTagPosition() {
+        // 将经纬度转换为UTM坐标
+        geographic_msgs::GeoPoint home_geo, tag_geo;
+        home_geo.latitude = home_position_.latitude;
+        home_geo.longitude = home_position_.longitude;
+        home_geo.altitude = home_position_.altitude;
+        
+        tag_geo.latitude = tag_lat_;
+        tag_geo.longitude = tag_lon_;
+        tag_geo.altitude = tag_alt_;
+
+        geodesy::UTMPoint home_utm, tag_utm;
+        geodesy::fromMsg(home_geo, home_utm);
+        geodesy::fromMsg(tag_geo, tag_utm);
+
+        // 计算本地坐标偏移
+        approx_tag_target_.pose.position.x = tag_utm.easting - home_utm.easting;
+        approx_tag_target_.pose.position.y = tag_utm.northing - home_utm.northing;
+        approx_tag_target_.pose.position.z = target_height_;  // 保持目标高度
+        
+        ROS_INFO("Computed approximate tag position: [%.2f, %.2f, %.2f]", 
+                approx_tag_target_.pose.position.x,
+                approx_tag_target_.pose.position.y,
+                approx_tag_target_.pose.position.z);
     }
 
-    void extStateCb(const mavros_msgs::ExtendedState::ConstPtr& msg) {
-        ext_state_ = *msg;
-    }
-
+    // 设置悬停目标
     void SetHoverTarget() {
-        hover_target_.pose.position.x = init_lat_;
-        hover_target_.pose.position.y = init_lon_;
-        hover_target_.pose.position.z = init_alt_ + target_height_;
+        hover_target_.pose.position.x = 0;
+        hover_target_.pose.position.y = 0;
+        hover_target_.pose.position.z = target_height_;
     }
 
     bool CheckPositionReached(const geometry_msgs::PoseStamped& target, double tolerance) {
-        double dx = current_gnss_pose_.pose.pose.position.x - target.pose.position.x;
-        double dy = current_gnss_pose_.pose.pose.position.y - target.pose.position.y;
-        double dz = current_gnss_pose_.pose.pose.position.z - target.pose.position.z;
+        double dx = current_local_position_.pose.pose.position.x - target.pose.position.x;
+        double dy = current_local_position_.pose.pose.position.y - target.pose.position.y;
+        double dz = current_local_position_.pose.pose.position.z - target.pose.position.z;
         return sqrt(dx*dx + dy*dy + dz*dz) < tolerance;
     }
 
@@ -175,7 +220,7 @@ private:
     void ProcessFlightState() {
         switch(phase_) {
             case WAIT_FCU:
-                if(current_state_.connected && init_position_received_) {
+                if(current_state_.connected && home_set_) {
                     phase_ = ARM_DRONE;
                     ROS_INFO("[1/6] Systems ready");
                 }
@@ -197,25 +242,26 @@ private:
                 break;
                 
             case MOVE_TO_POINT:
-                // 此处可设置航路点或保持悬停
-                pose_pub_.publish(hover_target_);
-                phase_ = DETECT_TAG;
-                ROS_INFO("[4/6] Searching for landing target...");
+                pose_pub_.publish(approx_tag_target_);
+                if(CheckPositionReached(approx_tag_target_, 0.2)) {
+                    phase_ = DETECT_TAG;
+                    ROS_INFO("[4/6] Reached approximate tag position");
+                }
                 break;
                 
             case DETECT_TAG:
-                if(IsTagPositionStable()) {
+                if(IsTagPositionStable() && tag_position_set_) {
                     phase_ = MOVE_TO_TAG;
                     ROS_INFO("[5/6] Target position stabilized");
                 }
                 break;
                 
             case MOVE_TO_TAG:
-                if(CheckPositionReached(tag_target_, landing_threshold_)) {
+                if(CheckPositionReached(precise_tag_target_, landing_threshold_)) {
                     phase_ = LAND_DRONE;
                     ROS_INFO("[6/6] Reached landing position");
                 } else {
-                    pose_pub_.publish(tag_target_);
+                    pose_pub_.publish(precise_tag_target_);
                 }
                 break;
                 
