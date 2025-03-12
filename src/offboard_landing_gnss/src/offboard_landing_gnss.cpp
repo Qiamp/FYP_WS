@@ -51,10 +51,10 @@ public:
         arm_client_ = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
         mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
 
-        // 加载AprilTag大致坐标参数
-        nh_.param<double>("tag_latitude", tag_lat_, 0.0);
-        nh_.param<double>("tag_longitude", tag_lon_, 0.0);
-        nh_.param<double>("tag_altitude", tag_alt_, 0.0);
+        // AprilTag大致坐标参数
+        tag_lat_ = 31.2304;    // 纬度
+        tag_lon_ = 121.4737;   // 经度
+        tag_alt_ = 15.0;       // 海拔高度（单位：米）
         
         // 初始化飞行参数
         target_height_ = 1.5;      // 初始飞行高度
