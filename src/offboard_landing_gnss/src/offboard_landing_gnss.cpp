@@ -98,9 +98,9 @@ int main(int argc, char **argv)
 
     while(ros::ok()) 
     {
-                //请求进入OFFBOARD模式
-                if(current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(5.0))) 
-                {
+        //请求进入OFFBOARD模式
+        if(current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(3.0))) 
+        {
             if(set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent)
             {
                 ROS_INFO("Offboard enabled");
