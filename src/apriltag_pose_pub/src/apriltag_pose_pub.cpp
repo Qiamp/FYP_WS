@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <Eigen/Geometry>
 #include <deque>
@@ -7,42 +8,50 @@
 
 struct AprilTagTransformer {
     AprilTagTransformer() : nh_("~"), is_filter_initialized_(false), last_detection_time_(0) {
-        drone_pose_sub_ = nh_.subscribe("/mavros/vision_pose/pose", 10, 
-            &AprilTagTransformer::dronePoseCallback, this);
+        // 订阅GNSS和姿态数据
+        gnss_sub_ = nh_.subscribe("/mavros/global_position/local", 10,
+            &AprilTagTransformer::gnssCallback, this);
+        attitude_sub_ = nh_.subscribe("/mavros/local_position/pose", 10,
+            &AprilTagTransformer::attitudeCallback, this);
         april_tag_sub_ = nh_.subscribe("/tag_detections", 10,
             &AprilTagTransformer::aprilTagCallback, this);
-        
+
+        // 初始化发布者
         body_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_body", 10);
         inertial_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/tag_detections/tagpose_inertial", 10);
 
-        // 加载滤波参数
-        nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
-        nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
-        nh_.param("buffer_size", buffer_size_, 30); // 缓冲区大小
-        nh_.param("position_threshold", position_threshold_, 0.05); // 位置波动阈值
+        // 加载参数
+        nh_.param("filter_alpha", filter_alpha_, 0.2);
+        nh_.param("max_time_gap", max_time_gap_, 1.5);
+        nh_.param("buffer_size", buffer_size_, 15);
+        nh_.param("position_threshold", position_threshold_, 0.05);
 
+        // 初始化相机到机体系变换矩阵
         initTransforms();
     }
 
     ros::NodeHandle nh_;
-    ros::Subscriber drone_pose_sub_, april_tag_sub_;
+    ros::Subscriber gnss_sub_, attitude_sub_, april_tag_sub_;
     ros::Publisher body_pose_pub_, inertial_pose_pub_;
     
-    geometry_msgs::PoseStamped current_drone_pose_;
-    bool has_drone_pose_ = false;
+    geometry_msgs::Point current_gnss_position_;
+    geometry_msgs::Quaternion current_attitude_;
+    bool has_gnss_position_ = false;
+    bool has_attitude_ = false;
     
     Eigen::Isometry3d T_body_camera_;
-    Eigen::Vector3d filtered_position_;  // 滤波后的位置
-    bool is_filter_initialized_;         // 滤波器初始化标志
-    double filter_alpha_;                // EMA滤波系数
-    double max_time_gap_;                // 最大允许时间间隔
-    ros::Time last_detection_time_;      // 上次检测时间戳
+    Eigen::Vector3d filtered_position_;
+    bool is_filter_initialized_;
+    double filter_alpha_;
+    double max_time_gap_;
+    ros::Time last_detection_time_;
 
-    std::deque<Eigen::Vector3d> position_buffer_;  // 位置数据缓冲区
-    int buffer_size_;               // 要求连续检测次数
-    double position_threshold_;     // 位置波动阈值
+    std::deque<Eigen::Vector3d> position_buffer_;
+    int buffer_size_;
+    double position_threshold_;
 
     void initTransforms() {
+        // 保持原始相机到机体系的变换参数
         T_body_camera_ = Eigen::Isometry3d::Identity();
         
         Eigen::Matrix3d rotation;
@@ -53,24 +62,34 @@ struct AprilTagTransformer {
         T_body_camera_.translation() << 0.00, 0.00, 0.00;
     }
 
-    void dronePoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
-        current_drone_pose_ = *msg;
-        has_drone_pose_ = true;
+    void gnssCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+        current_gnss_position_ = msg->pose.pose.position;
+        has_gnss_position_ = true;
+        ROS_DEBUG_THROTTLE(5, "GNSS position updated: (%.2f, %.2f, %.2f)",
+                          current_gnss_position_.x, current_gnss_position_.y, current_gnss_position_.z);
+    }
+
+    void attitudeCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        current_attitude_ = msg->pose.orientation;
+        has_attitude_ = true;
+        ROS_DEBUG_THROTTLE(5, "Attitude updated: (%.2f, %.2f, %.2f, %.2f)",
+                          current_attitude_.x, current_attitude_.y,
+                          current_attitude_.z, current_attitude_.w);
     }
 
     void aprilTagCallback(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg) {
         if (msg->detections.empty()) {
-            ROS_WARN_THROTTLE(1, "[AprilTag] No tags detected!");  // 未检测到标签时的警告
+            ROS_WARN_THROTTLE(1, "[AprilTag] No tags detected!");
             return;
         }
 
-        ROS_INFO_THROTTLE(1, "[AprilTag] Detected %zu tags", msg->detections.size());  // 检测到的标签
+        ROS_INFO_THROTTLE(1, "[AprilTag] Detected %zu tags", msg->detections.size());
 
         const auto& detection = msg->detections[0];
         const auto& tag_pose_camera = detection.pose.pose.pose;
 
         try {
-            // 转换姿态到机体坐标系
+            // 完整的相机坐标系到机体系变换
             Eigen::Isometry3d pose_camera = Eigen::Isometry3d::Identity();
             pose_camera.translation() << tag_pose_camera.position.x,
                                         tag_pose_camera.position.y,
@@ -82,39 +101,41 @@ struct AprilTagTransformer {
                 tag_pose_camera.orientation.z
             ).toRotationMatrix();
 
-            // 相机到机体的完整变换
+            // 应用相机到机体系的变换
             Eigen::Isometry3d pose_body = T_body_camera_ * pose_camera;
-            // 手动填充pose_body的平移为直接获取的三维坐标
-            pose_body.translation() <<  -tag_pose_camera.position.y + 0.23, //Body X轴
-                                        -tag_pose_camera.position.x + 0.06, //Body Y轴
-                                        -tag_pose_camera.position.z - 0.08; //Body Z轴
+            
+            // 保留手动坐标修正
+            pose_body.translation() <<  
+                -tag_pose_camera.position.y + 0.23,
+                -tag_pose_camera.position.x,
+                -tag_pose_camera.position.z - 0.08;
 
-            // 发布机体坐标系下的完整姿态
             publishBodyPose(pose_body, msg->header.stamp);
 
-            if (!has_drone_pose_) return;
+            if (!has_gnss_position_ || !has_attitude_) {
+                ROS_WARN_THROTTLE(1, "Waiting for GNSS/attitude data...");
+                return;
+            }
 
-            // 转换到惯性坐标系
+            // 构建惯性系变换矩阵
             Eigen::Isometry3d T_inertial_body = Eigen::Isometry3d::Identity();
             T_inertial_body.linear() = Eigen::Quaterniond(
-                current_drone_pose_.pose.orientation.w,
-                current_drone_pose_.pose.orientation.x,
-                current_drone_pose_.pose.orientation.y,
-                current_drone_pose_.pose.orientation.z
+                current_attitude_.w,
+                current_attitude_.x,
+                current_attitude_.y,
+                current_attitude_.z
             ).toRotationMatrix();
-            T_inertial_body.translation() << current_drone_pose_.pose.position.x,
-                                           current_drone_pose_.pose.position.y,
-                                           current_drone_pose_.pose.position.z;
+            T_inertial_body.translation() << 
+                current_gnss_position_.x,
+                current_gnss_position_.y,
+                current_gnss_position_.z;
 
             Eigen::Isometry3d pose_inertial = T_inertial_body * pose_body;
 
-            // 应用位置滤波器
+            // 应用滤波器
             applyPositionFilter(pose_inertial, msg->header.stamp);
-
-            // 更新缓冲区
             updatePositionBuffer(pose_inertial.translation());
 
-            // 条件检查并发布
             if (checkPublishConditions()) {
                 publishInertialPose(pose_inertial, msg->header.stamp);
             }
@@ -127,21 +148,19 @@ struct AprilTagTransformer {
     void applyPositionFilter(Eigen::Isometry3d& pose, const ros::Time& stamp) {
         Eigen::Vector3d current_pos = pose.translation();
         
-        // 检查时间间隔决定是否重置滤波器
         if (is_filter_initialized_) {
             double dt = (stamp - last_detection_time_).toSec();
             if (dt > max_time_gap_) {
-                ROS_WARN("[AprilTag] Detected %.1f seconds interval, resetting filter", dt); // 警告，有时间间隔，重置滤波器
+                ROS_WARN("[AprilTag] %.1fs gap detected, resetting filter", dt);
                 position_buffer_.clear();
                 is_filter_initialized_ = false;
             }
         }
 
-        // 更新滤波器
         if (!is_filter_initialized_) {
             filtered_position_ = current_pos;
             is_filter_initialized_ = true;
-            ROS_INFO("[AprilTag] Position filter initialized"); // 信息，滤波器已初始化
+            ROS_INFO("[AprilTag] Filter initialized");
         } else {
             filtered_position_ = filter_alpha_ * current_pos 
                                + (1.0 - filter_alpha_) * filtered_position_;
@@ -153,20 +172,18 @@ struct AprilTagTransformer {
 
     void updatePositionBuffer(const Eigen::Vector3d& position) {
         position_buffer_.push_back(position);
-        // 保持缓冲区大小
-        while (position_buffer_.size() > buffer_size_) {
+        if (position_buffer_.size() > buffer_size_) {
             position_buffer_.pop_front();
         }
     }
 
     bool checkPublishConditions() {
         if (position_buffer_.size() < buffer_size_) {
-            ROS_INFO_THROTTLE(5, "Data collection in progress (%zu/%d)", 
+            ROS_INFO_THROTTLE(5, "Buffering data... (%zu/%d)", 
                             position_buffer_.size(), buffer_size_);
             return false;
         }
 
-        // 计算各轴波动范围
         Eigen::Vector3d min_val = position_buffer_.front();
         Eigen::Vector3d max_val = position_buffer_.front();
         
@@ -175,8 +192,7 @@ struct AprilTagTransformer {
             max_val = max_val.cwiseMax(pos);
         }
 
-        const Eigen::Vector3d ranges = max_val - min_val;
-        
+        Eigen::Vector3d ranges = max_val - min_val;
         if (ranges.x() < position_threshold_ &&
             ranges.y() < position_threshold_ &&
             ranges.z() < position_threshold_) 
@@ -196,12 +212,10 @@ struct AprilTagTransformer {
         msg.header.stamp = stamp;
         msg.header.frame_id = "body_link";
         
-        // 位置
         msg.pose.position.x = pose.translation().x();
         msg.pose.position.y = pose.translation().y();
         msg.pose.position.z = pose.translation().z();
         
-        // 方向
         Eigen::Quaterniond q(pose.linear());
         q.normalize();
         msg.pose.orientation.w = q.w();
@@ -233,7 +247,7 @@ struct AprilTagTransformer {
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "apriltag_pose_pub");
+    ros::init(argc, argv, "apriltag_pose_pub_gnss");
     AprilTagTransformer transformer;
     ros::spin();
     return 0;
