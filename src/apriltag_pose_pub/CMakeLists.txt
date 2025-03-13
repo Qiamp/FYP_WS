@@ -1,70 +1,40 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(apriltag_pose_pub)
-
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  mavros
-  sensor_msgs
-  std_msgs
   geometry_msgs
+  nav_msgs
   apriltag_ros
 )
-find_package(cmake_modules REQUIRED)
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-find_package(Boost REQUIRED)
-find_package(Eigen 3.1.2 REQUIRED)
-
-
-include_directories(include ${catkin_INCLUDE_DIRS})
-include_directories(${Eigen_INCLUDE_DIRS})
+find_package(Eigen3 REQUIRED)
 
 catkin_package(
-  CATKIN_DEPENDS roscpp mavros
+  LIBRARIES apriltag_pose_pub
+  CATKIN_DEPENDS roscpp geometry_msgs nav_msgs apriltag_ros
 )
 
-find_library (GeographicLib_LIBRARIES Geographic
-  PATHS "${CMAKE_INSTALL_PREFIX}/../GeographicLib/lib")
-
-if (GeographicLib_LIBRARIES)
-  get_filename_component (GeographicLib_LIBRARY_DIRS
-    "${GeographicLib_LIBRARIES}" PATH)
-
-  get_filename_component (_ROOT_DIR "${GeographicLib_LIBRARY_DIRS}" PATH)
-  set (GeographicLib_INCLUDE_DIRS "${_ROOT_DIR}/../include")
-  set (GeographicLib_BINARY_DIRS "${_ROOT_DIR}/../bin")
-
-  # Required for Debian-alike systems
-  find_library (GeographicLib_LIBRARIES_DEBIAN libGeographic.so
-    PATHS "/usr/lib/x86_64-linux-gnu")
-  if (GeographicLib_LIBRARIES_DEBIAN)
-    set (GeographicLib_LIBRARIES ${GeographicLib_LIBRARIES_DEBIAN})
-    get_filename_component (GeographicLib_LIBRARY_DIRS
-      "${GeographicLib_LIBRARIES}" PATH)
-  endif ()
-  endif ()
-
-catkin_package(
-  DEPENDS Boost Eigen roscpp
-  INCLUDE_DIRS ${catkin_INCLUDE_DIRS}
-  CATKIN_DEPENDS roscpp sensor_msgs std_msgs geometry_msgs 
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
-add_executable(${PROJECT_NAME} src/apriltag_pose_pub.cpp)
+add_executable(apriltag_pose_pub_gnss
+  src/apriltag_pose_pub.cpp
+)
 
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
+target_link_libraries(apriltag_pose_pub_gnss
+  ${catkin_LIBRARIES}
+)
 
-add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+install(TARGETS apriltag_pose_pub_gnss
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
 )
-
-## Mark executables and/or libraries for installation
-install(TARGETS
-  ${PROJECT_NAME}
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
- )

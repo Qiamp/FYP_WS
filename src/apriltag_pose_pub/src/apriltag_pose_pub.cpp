@@ -1,6 +1,6 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <nav_msgs/Odometry.h>  // 修改为Odometry类型
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <Eigen/Geometry>
 #include <deque>
@@ -62,7 +62,8 @@ struct AprilTagTransformer {
         T_body_camera_.translation() << 0.00, 0.00, 0.00;
     }
 
-    void gnssCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+    // 修改GNSS回调函数类型为Odometry
+    void gnssCallback(const nav_msgs::Odometry::ConstPtr& msg) {
         current_gnss_position_ = msg->pose.pose.position;
         has_gnss_position_ = true;
         ROS_DEBUG_THROTTLE(5, "GNSS position updated: (%.2f, %.2f, %.2f)",
