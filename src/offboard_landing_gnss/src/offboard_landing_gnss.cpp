@@ -58,7 +58,7 @@ public:
         
         // 初始化飞行参数
         target_height_ = 1.5;      // 初始飞行高度
-        landing_threshold_ = 0.3;  // 着陆位置容差
+        landing_threshold_ = 0.1;  // 着陆位置容差
     }
 
     void run() {
@@ -192,8 +192,8 @@ private:
 
     // 设置悬停目标
     void SetHoverTarget() {
-        hover_target_.pose.position.x = 0;
-        hover_target_.pose.position.y = 0;
+        hover_target_.pose.position.x = current_local_position_.pose.pose.position.x;
+        hover_target_.pose.position.y = current_local_position_.pose.pose.position.y;
         hover_target_.pose.position.z = target_height_;
     }
 
