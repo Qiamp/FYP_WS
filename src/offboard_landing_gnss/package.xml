@@ -2,21 +2,19 @@
 <package format="2">
   <name>offboard_landing_gnss</name>
   <version>0.1.0</version>
-  <description>MAVROS offboard landing GNSS control package</description>
+  <description>GNSS-based offboard landing controller with AprilTag integration</description>
 
-  <maintainer email="jiaqi.zhao@connect.polyu.hk">JAY ZHAO</maintainer>
+  <maintainer email="your.email@example.com">Your Name</maintainer>
   <license>Apache 2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
 
   <depend>roscpp</depend>
-  <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>mavros_msgs</depend>
-  <depend>mavros</depend>
+  <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>geographic_msgs</depend>
+  <depend>geodesy</depend>  <!-- Added geodesy dependency -->
   <depend>tf</depend>
-
-  <export>
-  </export>
 </package>

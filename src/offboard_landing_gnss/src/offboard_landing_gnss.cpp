@@ -153,6 +153,16 @@ private:
         tag_position_set_ = true;
     }
 
+    void stateCb(const mavros_msgs::State::ConstPtr& msg) 
+    {
+        current_state_ = *msg;
+    }
+
+    void extStateCb(const mavros_msgs::ExtendedState::ConstPtr& msg) 
+    {
+        ext_state_ = *msg;
+    }
+
     // 计算AprilTag大致本地坐标
     void ComputeApproxTagPosition() {
         // 将经纬度转换为UTM坐标
@@ -291,7 +301,7 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "gnss_landing_node");
+    ros::init(argc, argv, "offboard_landing_gnss_node");
     GNSSLanding controller;
     controller.run();
     return 0;
