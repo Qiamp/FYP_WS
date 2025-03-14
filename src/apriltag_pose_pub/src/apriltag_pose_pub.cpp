@@ -1,6 +1,6 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <nav_msgs/Odometry.h>  // 修改为Odometry类型
+#include <nav_msgs/Odometry.h>
 #include <apriltag_ros/AprilTagDetectionArray.h>
 #include <Eigen/Geometry>
 #include <deque>
@@ -9,10 +9,8 @@
 struct AprilTagTransformer {
     AprilTagTransformer() : nh_("~"), is_filter_initialized_(false), last_detection_time_(0) {
         // 订阅GNSS和姿态数据
-        gnss_sub_ = nh_.subscribe("/mavros/global_position/local", 10,
-            &AprilTagTransformer::gnssCallback, this);
         attitude_sub_ = nh_.subscribe("/mavros/local_position/pose", 10,
-            &AprilTagTransformer::attitudeCallback, this);
+            &AprilTagTransformer::PoseCallback, this);
         april_tag_sub_ = nh_.subscribe("/tag_detections", 10,
             &AprilTagTransformer::aprilTagCallback, this);
 
@@ -62,20 +60,12 @@ struct AprilTagTransformer {
         T_body_camera_.translation() << 0.00, 0.00, 0.00;
     }
 
-    // 修改GNSS回调函数类型为Odometry
-    void gnssCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-        current_gnss_position_ = msg->pose.pose.position;
-        has_gnss_position_ = true;
-        ROS_DEBUG_THROTTLE(5, "GNSS position updated: (%.2f, %.2f, %.2f)",
-                          current_gnss_position_.x, current_gnss_position_.y, current_gnss_position_.z);
-    }
-
-    void attitudeCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+    void PoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        current_gnss_position_ = msg->pose.position;
         current_attitude_ = msg->pose.orientation;
+        has_gnss_position_ = true;
         has_attitude_ = true;
-        ROS_DEBUG_THROTTLE(5, "Attitude updated: (%.2f, %.2f, %.2f, %.2f)",
-                          current_attitude_.x, current_attitude_.y,
-                          current_attitude_.z, current_attitude_.w);
+        ROS_DEBUG_THROTTLE(5, "GNSS position, Attitude updated");
     }
 
     void aprilTagCallback(const apriltag_ros::AprilTagDetectionArray::ConstPtr& msg) {
@@ -132,6 +122,7 @@ struct AprilTagTransformer {
                 current_gnss_position_.z;
 
             Eigen::Isometry3d pose_inertial = T_inertial_body * pose_body;
+            pose_inertial.translation().y() -= 0.23;
 
             // 应用滤波器
             applyPositionFilter(pose_inertial, msg->header.stamp);
