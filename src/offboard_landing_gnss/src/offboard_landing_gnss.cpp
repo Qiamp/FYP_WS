@@ -30,8 +30,8 @@ public:
         gnss_raw_sub_ = nh_.subscribe<sensor_msgs::NavSatFix>(
             "/mavros/global_position/raw/fix", 10, &GNSSLanding::gnssRawCb, this);
         
-        gnss_local_sub_ = nh_.subscribe<nav_msgs::Odometry>(
-            "/mavros/global_position/local", 10, &GNSSLanding::gnssLocalCb, this);
+        gnss_local_sub_ = nh_.subscribe<geometry_msgs::PoseStamped>(
+            "/mavros/local_position/pose", 10, &GNSSLanding::gnssLocalCb, this);
         
         // AprilTag GNSS位置订阅
         tag_pose_sub_ = nh_.subscribe<geometry_msgs::PoseStamped>(
@@ -95,7 +95,7 @@ private:
     
     // 定位相关
     sensor_msgs::NavSatFix home_position_;
-    nav_msgs::Odometry current_local_position_;
+    geometry_msgs::PoseStamped current_local_pose_;
     geometry_msgs::PoseStamped hover_target_, approx_tag_target_, precise_tag_target_;
     bool home_set_, tag_position_set_;
     
@@ -133,8 +133,8 @@ private:
     }
 
     // 本地定位回调
-    void gnssLocalCb(const nav_msgs::Odometry::ConstPtr& msg) {
-        current_local_position_ = *msg;
+    void gnssLocalCb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+        current_local_pose_ = *msg;
     }
 
     // AprilTag定位回调
@@ -149,7 +149,7 @@ private:
         
         // 更新精确目标位置
         precise_tag_target_ = *msg;
-        precise_tag_target_.pose.position.z = current_local_position_.pose.pose.position.z;
+        precise_tag_target_.pose.position.z = current_local_pose_.pose.position.z;
         tag_position_set_ = true;
     }
 
@@ -192,15 +192,15 @@ private:
 
     // 设置悬停目标
     void SetHoverTarget() {
-        hover_target_.pose.position.x = current_local_position_.pose.pose.position.x;
-        hover_target_.pose.position.y = current_local_position_.pose.pose.position.y;
+        hover_target_.pose.position.x = current_local_pose_.pose.position.x;
+        hover_target_.pose.position.y = current_local_pose_.pose.position.y;
         hover_target_.pose.position.z = target_height_;
     }
 
     bool CheckPositionReached(const geometry_msgs::PoseStamped& target, double tolerance) {
-        double dx = current_local_position_.pose.pose.position.x - target.pose.position.x;
-        double dy = current_local_position_.pose.pose.position.y - target.pose.position.y;
-        double dz = current_local_position_.pose.pose.position.z - target.pose.position.z;
+        double dx = current_local_pose_.pose.position.x - target.pose.position.x;
+        double dy = current_local_pose_.pose.position.y - target.pose.position.y;
+        double dz = current_local_pose_.pose.position.z - target.pose.position.z;
         return sqrt(dx*dx + dy*dy + dz*dz) < tolerance;
     }
 
