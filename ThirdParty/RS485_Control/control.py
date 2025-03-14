@@ -8,7 +8,7 @@ import time
 def send_hex_command():
     rospy.init_node('serial_command_node')
     port = rospy.get_param('~port', '/dev/ttyUSB0')  # 串口名称，默认值可根据需要修改
-    hex_command = rospy.get_param('~hex_command', '01 06 00 02 00 1E A8 02')  # HEX 指令，默认值可根据需要修改
+    hex_command = rospy.get_param('~hex_command', '01 06 00 02 00 1E A8 02')  # HEX 指令，默认值可根据需要修改 CRC-16 MODBUS
 
     # 打开串口
     try:
