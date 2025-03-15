@@ -99,7 +99,6 @@ private:
     // 定位相关
     sensor_msgs::NavSatFix home_position_;
     geometry_msgs::PoseStamped current_local_pose_;
-    geometry_msgs::PoseStamped current_local_pose_;
     geometry_msgs::PoseStamped hover_target_, approx_tag_target_, precise_tag_target_;
     bool home_set_, tag_position_set_, current_local_pose_received_;
     
@@ -149,9 +148,7 @@ private:
             tag_position_history_.pop_front();
         }
         
-        // 更新精确目标位置
         precise_tag_target_ = *msg;
-        precise_tag_target_.pose.position.z = current_local_pose_.pose.position.z;
         precise_tag_target_.pose.position.z = current_local_pose_.pose.position.z;
         tag_position_set_ = true;
     }
@@ -199,8 +196,6 @@ private:
     void SetHoverTarget() {
         hover_target_.pose.position.x = current_local_pose_.pose.position.x;
         hover_target_.pose.position.y = current_local_pose_.pose.position.y;
-        hover_target_.pose.position.x = current_local_pose_.pose.position.x;
-        hover_target_.pose.position.y = current_local_pose_.pose.position.y;
         hover_target_.pose.position.z = target_height_;
         ROS_INFO("Set hover target at current position: [%.2f, %.2f, %.2f]", 
                 hover_target_.pose.position.x,
@@ -209,9 +204,6 @@ private:
     }
 
     bool CheckPositionReached(const geometry_msgs::PoseStamped& target, double tolerance) {
-        double dx = current_local_pose_.pose.position.x - target.pose.position.x;
-        double dy = current_local_pose_.pose.position.y - target.pose.position.y;
-        double dz = current_local_pose_.pose.position.z - target.pose.position.z;
         double dx = current_local_pose_.pose.position.x - target.pose.position.x;
         double dy = current_local_pose_.pose.position.y - target.pose.position.y;
         double dz = current_local_pose_.pose.position.z - target.pose.position.z;
