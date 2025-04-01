@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="gps_converter" 
+        type="gps_to_rtcm_converter" 
+        name="gps_rtcm_converter" 
+        output="screen">
+  </node>
+</launch>

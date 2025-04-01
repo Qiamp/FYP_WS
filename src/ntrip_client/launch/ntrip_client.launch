@@ -7,12 +7,12 @@
   <arg name="namespace"              default = "/" />
   <arg name="node_name"              default = "ntrip_client" />
   <arg name="debug"                  default = "false" />
-  <arg name="host"                   default = "ntrip.geodetic.gov.hk" />
-  <arg name="port"                   default = "2101" />
-  <arg name="mountpoint"             default = "HKSC_32" />
+  <arg name="host"                   default = "rtk.ntrip.qxwz.com" />
+  <arg name="port"                   default = "8002" />
+  <arg name="mountpoint"             default = "AUTO" />
   <arg name="authenticate"           default = "true" />
-  <arg name="username"               default = "psi_user" />
-  <arg name="password"               default = "psi" />
+  <arg name="username"               default = "qxykhy001009" />
+  <arg name="password"               default = "4d50913" />
   <arg name="ntrip_version"          default = "" />
   <arg name="ssl"                    default = "false" />
   <arg name="cert"                   default = "" />

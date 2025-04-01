@@ -1,6 +1,5 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/SetMode.h>
@@ -25,11 +24,12 @@ enum FlightPhase {
 
 class GNSSLanding {
 public:
-    GNSSLanding() : phase_(WAIT_FCU), home_set_(false), tag_position_set_(false) {
+    GNSSLanding() : phase_(WAIT_FCU), home_set_(false), tag_position_set_(false), current_local_pose_received_(false) {
         // GNSS定位订阅
         gnss_raw_sub_ = nh_.subscribe<sensor_msgs::NavSatFix>(
             "/mavros/global_position/raw/fix", 10, &GNSSLanding::gnssRawCb, this);
         
+        // 本地位置订阅（使用PoseStamped）
         gnss_local_sub_ = nh_.subscribe<geometry_msgs::PoseStamped>(
             "/mavros/local_position/pose", 10, &GNSSLanding::gnssLocalCb, this);
         
@@ -65,14 +65,17 @@ public:
         ros::Rate rate(20.0);
         
         // 等待连接和GNSS初始化
-        while(ros::ok() && (!current_state_.connected || !home_set_)) {
+        while(ros::ok() && (!current_state_.connected || !home_set_ || !current_local_pose_received_)) {
             ros::spinOnce();
             rate.sleep();
-            ROS_INFO_THROTTLE(1, "Waiting for FCU & GNSS initialization...");
+            ROS_INFO_THROTTLE(1, "Waiting for FCU & GNSS & Local Pose initialization...");
         }
 
-        // 设置初始悬停点（当前GNSS位置上方）
+        // 设置初始悬停点（当前本地坐标系正上方）
         SetHoverTarget();
+
+        // 计算AprilTag目标坐标（基于当前本地坐标系）
+        ComputeApproxTagPosition();
 
         // 发布初始位置
         for(int i=0; i<100; ++i){
@@ -97,7 +100,7 @@ private:
     sensor_msgs::NavSatFix home_position_;
     geometry_msgs::PoseStamped current_local_pose_;
     geometry_msgs::PoseStamped hover_target_, approx_tag_target_, precise_tag_target_;
-    bool home_set_, tag_position_set_;
+    bool home_set_, tag_position_set_, current_local_pose_received_;
     
     // AprilTag参数
     double tag_lat_, tag_lon_, tag_alt_;
@@ -126,15 +129,13 @@ private:
                     home_position_.latitude,
                     home_position_.longitude,
                     home_position_.altitude);
-            
-            // 计算AprilTag大致本地坐标
-            ComputeApproxTagPosition();
         }
     }
 
     // 本地定位回调
     void gnssLocalCb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
         current_local_pose_ = *msg;
+        current_local_pose_received_ = true;
     }
 
     // AprilTag定位回调
@@ -147,42 +148,43 @@ private:
             tag_position_history_.pop_front();
         }
         
-        // 更新精确目标位置
         precise_tag_target_ = *msg;
         precise_tag_target_.pose.position.z = current_local_pose_.pose.position.z;
         tag_position_set_ = true;
     }
 
-    void stateCb(const mavros_msgs::State::ConstPtr& msg) 
-    {
+    void stateCb(const mavros_msgs::State::ConstPtr& msg) {
         current_state_ = *msg;
     }
 
-    void extStateCb(const mavros_msgs::ExtendedState::ConstPtr& msg) 
-    {
+    void extStateCb(const mavros_msgs::ExtendedState::ConstPtr& msg) {
         ext_state_ = *msg;
     }
 
-    // 计算AprilTag大致本地坐标
+    // 计算AprilTag大致本地坐标（基于当前本地坐标系）
     void ComputeApproxTagPosition() {
-        // 将经纬度转换为UTM坐标
-        geographic_msgs::GeoPoint home_geo, tag_geo;
-        home_geo.latitude = home_position_.latitude;
-        home_geo.longitude = home_position_.longitude;
-        home_geo.altitude = home_position_.altitude;
-        
+        // 获取当前本地坐标系原点对应的UTM坐标
+        geographic_msgs::GeoPoint current_geo;
+        current_geo.latitude = home_position_.latitude;
+        current_geo.longitude = home_position_.longitude;
+        current_geo.altitude = home_position_.altitude;
+
+        geodesy::UTMPoint current_utm;
+        geodesy::fromMsg(current_geo, current_utm);
+
+        // 计算目标点UTM坐标
+        geographic_msgs::GeoPoint tag_geo;
         tag_geo.latitude = tag_lat_;
         tag_geo.longitude = tag_lon_;
         tag_geo.altitude = tag_alt_;
 
-        geodesy::UTMPoint home_utm, tag_utm;
-        geodesy::fromMsg(home_geo, home_utm);
+        geodesy::UTMPoint tag_utm;
         geodesy::fromMsg(tag_geo, tag_utm);
 
-        // 计算本地坐标偏移
-        approx_tag_target_.pose.position.x = tag_utm.easting - home_utm.easting;
-        approx_tag_target_.pose.position.y = tag_utm.northing - home_utm.northing;
-        approx_tag_target_.pose.position.z = target_height_;  // 保持目标高度
+        // 转换为本地ENU坐标系偏移（相对于当前本地坐标系原点）
+        approx_tag_target_.pose.position.x = tag_utm.easting - current_utm.easting;
+        approx_tag_target_.pose.position.y = tag_utm.northing - current_utm.northing;
+        approx_tag_target_.pose.position.z = target_height_;
         
         ROS_INFO("Computed approximate tag position: [%.2f, %.2f, %.2f]", 
                 approx_tag_target_.pose.position.x,
@@ -190,11 +192,15 @@ private:
                 approx_tag_target_.pose.position.z);
     }
 
-    // 设置悬停目标
+    // 设置悬停目标（当前本地坐标系正上方）
     void SetHoverTarget() {
         hover_target_.pose.position.x = current_local_pose_.pose.position.x;
         hover_target_.pose.position.y = current_local_pose_.pose.position.y;
         hover_target_.pose.position.z = target_height_;
+        ROS_INFO("Set hover target at current position: [%.2f, %.2f, %.2f]", 
+                hover_target_.pose.position.x,
+                hover_target_.pose.position.y,
+                hover_target_.pose.position.z);
     }
 
     bool CheckPositionReached(const geometry_msgs::PoseStamped& target, double tolerance) {
