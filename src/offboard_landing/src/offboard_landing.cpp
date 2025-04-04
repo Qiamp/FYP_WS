@@ -12,6 +12,7 @@ enum FlightPhase {
     WAIT_FCU,       // 等待飞控连接
     ARM_DRONE,      // 解锁无人机
     TAKEOFF,        // 起飞悬停
+    MISSION,        // 执行任务
     MOVE_TO_POINT,  // 飞向目标点
     DETECT_TAG,     // 检测AprilTag
     MOVE_TO_TAG,    // 飞向AprilTag位置
@@ -48,7 +49,26 @@ public:
         // 初始悬停点（视觉坐标系原点）
         hover_target_.pose.position.x = 0.0;
         hover_target_.pose.position.y = 0.0;
-        hover_target_.pose.position.z = 1.5;
+        hover_target_.pose.position.z = 2.0;
+
+        
+        // 初始化任务航点（根据需求修改坐标）
+        mission_waypoints_.resize(3); // 3个航点
+
+        // 航点1
+        mission_waypoints_[0].pose.position.x = 1.5;
+        mission_waypoints_[0].pose.position.y = 0.0;
+        mission_waypoints_[0].pose.position.z = 2.0;
+        
+        // 航点2 
+        mission_waypoints_[1].pose.position.x = 1.5;
+        mission_waypoints_[1].pose.position.y = 1.5;
+        mission_waypoints_[1].pose.position.z = 2.0;
+        
+        // 航点3
+        mission_waypoints_[2].pose.position.x = 0.0;
+        mission_waypoints_[2].pose.position.y = 1.5;
+        mission_waypoints_[2].pose.position.z = 2.0;
     }
 
     void run() {
@@ -85,6 +105,8 @@ private:
     geometry_msgs::PoseStamped target_, hover_target_, tag_target_;
     ros::Time state_start_time_;
     bool uav_pose_received_ = false;
+    std::vector<geometry_msgs::PoseStamped> mission_waypoints_;
+    size_t current_waypoint_index_ = 0;
 
     // AprilTag相关参数
     std::deque<geometry_msgs::Point> tag_position_history_;
@@ -177,11 +199,32 @@ private:
         case TAKEOFF:
             pose_pub_.publish(hover_target_);
             if(checkPositionReached(hover_target_, 0.1)) {
-                phase_ = MOVE_TO_POINT;
+                phase_ = MISSION;
                 ROS_INFO("[3/6] Reached hover position");
             }
             break;
 
+        case MISSION:
+            if(current_waypoint_index_ < mission_waypoints_.size()) {
+                // 发布当前航点
+                pose_pub_.publish(mission_waypoints_[current_waypoint_index_]);
+                
+                // 检查是否到达当前航点
+                if(checkPositionReached(mission_waypoints_[current_waypoint_index_], 0.15)) {
+                    ROS_INFO("Reached waypoint %zu", current_waypoint_index_ + 1);
+                    current_waypoint_index_++;
+                    
+                    // 最后一个航点到达后切换状态
+                    if(current_waypoint_index_ == mission_waypoints_.size()) {
+                        phase_ = MOVE_TO_POINT;
+                        ROS_INFO("All mission waypoints reached");
+                        ROS_WARN("Platform Up");
+                    }
+                }
+            } else {
+                phase_ = MOVE_TO_POINT;
+            }
+            break;
 
         case MOVE_TO_POINT:
             pose_pub_.publish(target_);
@@ -210,7 +253,7 @@ private:
         case MOVE_TO_TAG:
             // pose_pub_.publish(tag_target_);  //For testing
             if(has_tag_position_) {
-                pose_pub_.publish(tag_target_);
+            pose_pub_.publish(tag_target_);
                 ROS_INFO("[6/6] Moving to tag position...");
                 if(checkPositionReached(tag_target_, 0.05)) {
                     if(setMode("POSCTL")) {

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>vicon_mission</name>
+  <version>0.0.0</version>
+  <description>MAVROS mission controller using Vicon positioning system</description>
+
+  <maintainer email="user@example.com">Your Name</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Combined dependencies (build and runtime) -->
+  <depend>roscpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>mavros_msgs</depend>
+  <depend>eigen</depend>
+</package>

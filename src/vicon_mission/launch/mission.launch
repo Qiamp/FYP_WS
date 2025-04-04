@@ -1,0 +1,5 @@
+<launch>
+    <!-- Mission Node -->
+    <node pkg="vicon_mission" type="vicon_mission" name="vicon_mission" output="screen">
+    </node>
+</launch>

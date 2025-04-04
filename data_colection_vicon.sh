@@ -6,7 +6,6 @@ source ~/FYP_WS/devel/setup.bash
 roslaunch vrpn_client_ros sample.launch & sleep 6;
 
 echo "========== 2. Starting mavros =========="
-#source /home/nvidia/ws_uav_setup/devel/setup.bash
 sudo chmod 777 /dev/tty*
 roslaunch mavros px4.launch & sleep 5;
 # rosrun mavros mavcmd long 511 31 10000 0 0 0 0 0
