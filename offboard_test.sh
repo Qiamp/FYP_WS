@@ -10,9 +10,9 @@ echo "========== 2. Starting mavros =========="
 sudo chmod 777 /dev/tty*
 roslaunch mavros px4.launch & sleep 5;
 
-# echo "========== 3. Starting Offboard =========="
-# source ~/FYP_WS/devel/setup.bash
-# roslaunch ~/FYP_WS/src/offboard_landing/launch/offb.launch;
+echo "========== 3. Starting Offboard =========="
+source ~/FYP_WS/devel/setup.bash
+roslaunch vicon_mission mission.launch
 
 
 
