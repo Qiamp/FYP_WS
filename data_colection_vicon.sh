@@ -1,14 +1,15 @@
 #!/bin/bash
 
 echo "========== 1. Starting VICON =========="
-source /opt/ros/noetic/setup.bash
+# source /opt/ros/noetic/setup.bash
 source ~/FYP_WS/devel/setup.bash
 roslaunch vrpn_client_ros sample.launch & sleep 6;
 
 echo "========== 2. Starting mavros =========="
 sudo chmod 777 /dev/tty*
 roslaunch mavros px4.launch & sleep 5;
-# rosrun mavros mavcmd long 511 31 10000 0 0 0 0 0
+# rosrun mavros mavcmd long 511 105 5000 0 0 0 0 0
+# 175HZ
 
 echo "========== 3. Starting USB_CAM =========="
 roslaunch usb_cam usb_cam-test.launch & sleep 5;

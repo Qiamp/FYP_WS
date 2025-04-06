@@ -181,14 +181,21 @@ private:
         
         case MOVE_TO_LAND:
         pose_pub_.publish(land_target_);
-        if(checkPositionReached(hover_target_, 0.1)) {
+        if(checkPositionReached(land_target_, 0.05)) {
             phase_ = LAND_DRONE;
             ROS_INFO("[6/6] Reached land position");
         }
         break;
 
         case LAND_DRONE:
-            armDrone(false);
+            setMode("POSCTL");
+            ros::Duration(3.0).sleep();
+            setMode("AUTO.LAND");
+            if(ext_state_.landed_state == mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND) {
+                armDrone(false);
+                ROS_INFO("Mission Complete");
+                ros::shutdown();
+            }
             ROS_WARN("Disarm");
             break;
         }
