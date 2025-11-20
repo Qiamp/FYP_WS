@@ -19,7 +19,7 @@ struct AprilTagTransformer {
         nh_.param("filter_alpha", filter_alpha_, 0.2);  // 平滑系数
         nh_.param("max_time_gap", max_time_gap_, 1.5);   // 最大允许时间间隔重置阈值
         nh_.param("buffer_size", buffer_size_, 30); // 缓冲区大小
-        nh_.param("position_threshold", position_threshold_, 0.05); // 位置波动阈值
+        nh_.param("position_threshold", position_threshold_, 0.07); // 位置波动阈值
 
         initTransforms();
     }
@@ -51,11 +51,11 @@ struct AprilTagTransformer {
         //             -0.07814961, -0.06229757, -0.99499329;
         // T_body_camera_.linear() = rotation;
         // T_body_camera_.translation() << 0.23, -0.13, 0.25;
-        rotation << -0.00551579, -0.99489528, 0.10076193,
-                    -0.9996441,   0.00285582, -0.0265238,
-                     0.02610065, -0.10087237, -0.99455695;
-            T_body_camera_.linear() = rotation;
-            T_body_camera_.translation() << 0.06754294, -0.00780011, -0.08387095;
+        rotation << -0.01571323, -0.99979872,  0.01247418,
+                    -0.99840115,  0.01501134, -0.05449593,
+                     0.05429771, -0.01331055, -0.99843607;
+        T_body_camera_.linear() = rotation;
+        T_body_camera_.translation() << 0.06729976, 0.00973624, -0.08111136;
     }
 
     void dronePoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -90,9 +90,9 @@ struct AprilTagTransformer {
             // 相机到机体的完整变换
             Eigen::Isometry3d pose_body = T_body_camera_ * pose_camera;
             // 手动修正pose_body的平移
-            pose_body.translation().x() -= 0.02;
-            pose_body.translation().y() += 0.07;
-            pose_body.translation().z() += 0.24;
+            // pose_body.translation().x() -= 0.02;
+            // pose_body.translation().y() += 0.07;
+            // pose_body.translation().z() += 0.24;
 
             // 发布机体坐标系下的完整姿态
             publishBodyPose(pose_body, msg->header.stamp);

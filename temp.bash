@@ -9,6 +9,9 @@ echo "========== 4. Starting Image_Proc =========="
 roslaunch image_proc apriltag.launch & sleep 5;
 
 echo "========== 5. Starting AprilTag_ROS =========="
-roslaunch apriltag_ros continuous_detection.launch
+roslaunch apriltag_ros continuous_detection.launch & sleep 5;
+
+echo "========== 5. Starting apriltag_pose_pub =========="
+roslaunch apriltag_pose_pub apriltag_tracking.launch
 
 wait;
